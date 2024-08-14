@@ -1,0 +1,21 @@
+[project]
+name = "cerebro"
+version = "1.0"
+description = "Blueteam automation orchestrator"
+authors = [
+    { name = "Plup", email = "plup@plup.io" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi-slim",
+    "uvicorn[standard]",
+    "kubernetes"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "httpx"
+]
