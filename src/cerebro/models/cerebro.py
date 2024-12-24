@@ -9,7 +9,7 @@ from pydantic import (BaseModel, Field, computed_field, field_validator, Validat
 from fastapi import HTTPException
 from kubernetes import client, config, utils
 
-logger = logging.getLogger('uvicorn.error')
+logger = logging.getLogger(__name__)
 
 
 class WorkerNotFoundError(RuntimeError):
@@ -201,11 +201,11 @@ class K8sJob(BaseModel):
                         _preload_content = False
                     ).data.decode()
 
-                message = f'{job_id} last words: {logs.splitlines()[-1]}'
+                message = f'{job_id}: {logs.splitlines()[-1]}'
 
             except client.exceptions.ApiException as e:
                 logger.warning(e)
-                message = f'{job_id} logs not accessible'
+                message = f'{job_id} logs are not accessible'
 
             except IndexError:
                 message = f'{job_id} didn\'t log anything'
