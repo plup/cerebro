@@ -18,7 +18,7 @@ data:
           labels:
             env: dev
         spec:
-          backofflimit: 0
+          backoffLimit: 0
           template:
             spec:
               restartPolicy: Never
@@ -28,12 +28,13 @@ data:
               containers:
                 - name: job
                   image: job:latest
+                  #command: ["bash", "-c", "sleep infinity;"]
                   imagePullPolicy: Never
                   env:
                     - name: TH_URL
                       value: http://thehive:9000
-                    - name: TH_KEY
-                      value: 'thesecrettoken'
+                    - name: TH_USER # need X-TheHive header auth
+                      value: service
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -43,6 +44,9 @@ rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch", "create"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: v1
 kind: ServiceAccount

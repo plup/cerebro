@@ -127,7 +127,7 @@ spec:
               mountPath: /usr/share/elasticsearch/data
       containers:
         - name: elasticsearch
-          image: docker.elastic.co/elasticsearch/elasticsearch:7.17.12
+          image: elasticsearch:7.17.26
           ports:
             - containerPort: 9200
               name: http
@@ -219,7 +219,7 @@ spec:
       serviceAccountName: thehive
       containers:
         - name: thehive
-          image: strangebee/thehive:5.2
+          image: strangebee/thehive:5.3
           ports:
             - containerPort: 9000
               name: http

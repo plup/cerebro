@@ -1,4 +1,4 @@
 FROM python:3.11-slim
-RUN pip install "thehive4py>=2.0.0b"
+RUN pip install requests
 COPY tests/job.py /job.py
 ENTRYPOINT ["python", "/job.py"]
