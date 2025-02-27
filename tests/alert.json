@@ -1,0 +1,11 @@
+{
+  "type": "alert",
+  "source": "local",
+  "sourceRef": "1",
+  "title": "Test alert",
+  "description": "something happened",
+  "observables": [
+     { "dataType": "url", "data": "http://example.org" },
+     { "dataType": "mail", "data": "foo@example.org" }
+  ]
+}
