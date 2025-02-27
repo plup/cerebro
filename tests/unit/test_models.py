@@ -11,7 +11,7 @@ class TestWorker():
 
     def test_responder(self, default_workers):
         assert len(Responder.listall()) == 1
-        assert 'case_artifact:hostname' in Responder.get('foo').dataTypeList
+        assert 'thehive:case_artifact' in Responder.get('foo').dataTypeList
 
 
 class TestJob():

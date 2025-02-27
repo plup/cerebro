@@ -20,8 +20,8 @@ class Responder(Worker):
     @computed_field
     @property
     def dataTypeList(self) -> list[str]:
-        """Responders only run on case_artifacts."""
-        return [f"case_artifact:{f.split(':')[1]}" for f in self.triggers]
+        """Responders currently only support observables."""
+        return ["thehive:case_artifact"]
 
     @classmethod
     def listall(cls):
