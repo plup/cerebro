@@ -10,15 +10,17 @@ class ThehiveClient(Session):
     def __init__(self,
                  base_url = environ['TH_URL'],
                  key = environ.get('TH_KEY'),
-                 header_user = environ.get('TH_USER'),
+                 user = environ.get('TH_USER'),
+                 password = environ.get('TH_PASSWORD')
                 ):
         super().__init__()
         self.base_url = base_url
-        self.headers = {}
         if key:
-            self.headers['Authorization'] = f'Bearer {key}'
-        if header_user:
-            self.headers['X-TheHive'] = header_user
+            self.headers = {
+                'Authorization': f'Bearer {key}'
+            }
+        else:
+            self.auth = (user, password)
 
     def request(self, method, url, *args, **kwargs):
         joined_url = urljoin(self.base_url, url)

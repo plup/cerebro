@@ -33,8 +33,10 @@ data:
                   env:
                     - name: TH_URL
                       value: http://thehive:9000
-                    - name: TH_USER # need X-TheHive header auth
-                      value: service
+                    - name: TH_USER
+                      value: user@thehive.local
+                    - name: TH_PASSWORD
+                      value: secret
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1

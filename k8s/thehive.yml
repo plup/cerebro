@@ -219,7 +219,7 @@ spec:
       serviceAccountName: thehive
       containers:
         - name: thehive
-          image: strangebee/thehive:5.3
+          image: strangebee/thehive:5.4.7
           ports:
             - containerPort: 9000
               name: http
@@ -235,7 +235,7 @@ spec:
             - name: JVM_OPTS
               value: -Xms1024M -Xmx1024M
             - name: TH_SECRET
-              value: mySecretForTheHive
+              value: aLongSecretForTheHive(min_is_256_bits)
             - name: TH_CQL_HOSTNAMES
               value: cassandra
             - name: TH_INDEX_BACKEND
