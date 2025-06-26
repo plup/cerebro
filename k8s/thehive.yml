@@ -219,7 +219,7 @@ spec:
       serviceAccountName: thehive
       containers:
         - name: thehive
-          image: strangebee/thehive:5.4.7
+          image: strangebee/thehive:5.5
           ports:
             - containerPort: 9000
               name: http
