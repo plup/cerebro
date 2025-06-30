@@ -15,17 +15,43 @@ def default_workers(mocker):
                 'kind': 'Job',
                 'metadata': {
                     'generateName': 'cerebro-job-',
-                    'labels': {'env': 'test'},
                 },
                 'spec': {
                     'backofflimit': 0,
                     'template': {
                         'spec': {
                             'restartPolicy': 'Never',
-                            'securityContext': {
-                                'runAsNonRoot': True,
-                                'runAsUser': 1000,
-                            },
+                            'containers': [
+                                {
+                                    'name': 'job',
+                                    'image': 'job:latest',
+                                    'imagePullPolicy':'Never',
+                                    'env': [
+                                        {'name': 'TH_URL', 'value': 'http://thehive:9000'},
+                                        {'name': 'TH_KEY', 'value': 'secret'},
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        {
+            'name': 'bar',
+            'type': 'analyzer',
+            'triggers': ['observable:filename', 'observable:hostname'],
+            'manifest': {
+                'apiVersion': 'batch/v1',
+                'kind': 'Job',
+                'metadata': {
+                    'generateName': 'cerebro-job-',
+                },
+                'spec': {
+                    'backofflimit': 0,
+                    'template': {
+                        'spec': {
+                            'restartPolicy': 'Never',
                             'containers': [
                                 {
                                     'name': 'job',
@@ -43,7 +69,7 @@ def default_workers(mocker):
             }
         },
     ]
-    mocker.patch('cerebro.models.cerebro.Worker._load', return_value=workers)
+    mocker.patch('cerebro.models.base.Worker._load', return_value=workers)
 
 @pytest.fixture()
 def create_worker():
@@ -87,9 +113,9 @@ def create_worker():
 def k8s_create_job(mocker):
     """Return a partial fake job from the kubernetes API."""
     # disable the configuration fetching
-    mocker.patch('cerebro.models.cerebro.K8sJob.load_kube_config', return_value='default')
+    mocker.patch('cerebro.models.base.K8sJob.load_kube_config', return_value='default')
 
     # return the fake API response
     api_job = Mock(metadata=Mock(creation_timestamp=datetime.now()))
     api_job.metadata.name = 'job' # 'name' is a reserved attribute for mocks
-    yield mocker.patch('cerebro.models.cerebro.utils.create_from_dict', return_value=[api_job])
+    yield mocker.patch('cerebro.models.base.utils.create_from_dict', return_value=[api_job])

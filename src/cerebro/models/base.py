@@ -2,10 +2,11 @@ import logging
 import yaml
 import json
 from os import environ
+from typing import Any
 from uuid import uuid4
 from datetime import datetime
 from pydantic import (BaseModel, Field, computed_field, field_validator, ValidationError,
-                      ConfigDict, PrivateAttr)
+                      ConfigDict, PrivateAttr, model_validator)
 from fastapi import HTTPException
 from kubernetes import client, config, utils
 
@@ -104,7 +105,7 @@ class K8sJob(BaseModel):
             return active_context['context']['namespace']
 
     @classmethod
-    def create(cls, worker_id, object_type, object_id, context_type=None, context_id=None):
+    def create(cls, worker_id, artefact):
         # get the worker model
         worker = Worker.get(worker_id)
 
@@ -114,13 +115,14 @@ class K8sJob(BaseModel):
             # keep track of data expected by thehive
             manifest['metadata']['annotations'] = {
                     'cerebro/worker': worker_id,
-                    'cerebro/type': object_type
+                    'cerebro/type': artefact.type,
+                    'cerebro/id': artefact.id,
                 }
 
             # collect ids and type for the script exectuion
-            args = ['--object-type', object_type, '--object-id', object_id]
-            if context_type and context_id:
-                args.extend(['--context-type', context_type, '--context-id', context_id])
+            args = ['--object-type', artefact.type, '--object-id', artefact.id]
+            if artefact.ctx_type and artefact.ctx_id:
+                args.extend(['--context-type', artefact.ctx_type, '--context-id', artefact.ctx_id])
 
             # pass the args to the job entrypoint
             try:
@@ -146,7 +148,7 @@ class K8sJob(BaseModel):
         return cls(
             id = k8s_job.metadata.name,
             worker = worker,
-            object_type = object_type,
+            object_type = artefact.type,
             status = 'Waiting',
             started = k8s_job.metadata.creation_timestamp,
         )
@@ -219,3 +221,51 @@ class K8sJob(BaseModel):
             ended = k8s_job.status.completion_time,
             message = message,
         )
+
+class ThehiveArtefact(BaseModel):
+    type: str
+    id: str
+    ctx_type: str = ''
+    ctx_id: str = ''
+
+    @model_validator(mode='before')
+    @classmethod
+    def parse(cls, event: Any) -> Any:
+        """
+        Parse event and return a simplified object representing the artefact sent by TheHive.
+
+        This is an attempt to unify the analyzers and responders inputs by flattening them.
+        It only keeps track of the object types and ids leaving to the job the charge to make
+        a request to get the details.
+        It also keeps the alert or case id for observables because TheHive doesn't provide a way
+        to get them from the observable itself.
+        """
+        try:
+            artefact = {}
+            # extract observable parameters with alert or case context
+            if event['dataType'] == 'thehive:case_artifact':
+                artefact['type'] = 'observable:' + event['data']['dataType']
+                artefact['id'] = event['data']['id']
+                try:
+                    artefact['ctx_id'] = event['data']['alert']['id']
+                    artefact['ctx_type'] = 'alert'
+
+                except KeyError:
+                    artefact['ctx_id'] = event['data']['case']['id']
+                    artefact['ctx_type'] = 'case'
+
+            # extract alert parameters
+            if event['dataType'] == 'thehive:alert':
+                artefact['type'] = 'alert'
+                artefact['id'] = event['data']['id']
+
+            # extract case parameters
+            if event['dataType'] == 'thehive:case':
+                artefact['type'] = 'case'
+                artefact['id'] = event['data']['id']
+
+            return artefact
+
+        except KeyError as e:
+            logger.error(f"Payload malformed, missing {e}")
+            raise ValueError("Payload malformed")
