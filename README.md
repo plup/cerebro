@@ -36,8 +36,8 @@ Add a `hostPath` to mount the code and run cerebro from the code itself:
             - name: host-volume
               mountPath: /app
            env:
-+            - name: PYTHONPATH
-+              value: /app/src
+             - name: PYTHONPATH
+               value: /app/src
 ```
 
 Then reload the pods after a code change:

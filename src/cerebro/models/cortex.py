@@ -1,6 +1,6 @@
-"""Define models specific to Cortex."""
-from pydantic import BaseModel, Field, computed_field, field_validator
-from .cerebro import Worker, K8sJob
+"""Extend base models to match Cortex implementation."""
+from pydantic import Field, computed_field, field_validator
+from .base import Worker, K8sJob
 
 
 class Analyzer(Worker):
