@@ -28,7 +28,7 @@ data:
               containers:
                 - name: job
                   image: job:latest
-                  #command: ["bash", "-c", "sleep infinity;"]
+                  #command: ["sleep", "infinity"]
                   imagePullPolicy: Never
                   env:
                     - name: TH_URL
@@ -57,12 +57,12 @@ data:
         level: INFO
         handlers: [console]
         propagate: no
-      api:
+      cerebro:
         level: DEBUG
         handlers: [console]
         propagate: no
-      cerebro:
-        level: DEBUG
+      audit:
+        level: INFO
         handlers: [console]
         propagate: no
 ---

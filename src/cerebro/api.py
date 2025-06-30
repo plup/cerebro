@@ -3,11 +3,12 @@ import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 from importlib.metadata import version
-from cerebro.models import *
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
+from cerebro.models.base import WorkerNotFoundError
 
-app = FastAPI(title='api')
-logger = logging.getLogger('uvicorn.error')
+app = FastAPI(title='cerebro')
+logger = logging.getLogger(__name__)
+audit = logging.getLogger('audit')
 
 ## Status polling
 
@@ -43,6 +44,7 @@ def get_responder(id: str) -> Responder:
     # seems to be sending the name instead of the id
     try:
         return Responder.get(id)
+
     except WorkerNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -51,24 +53,44 @@ def run_responder(id: str, event: dict) -> CortexJob:
     """
     Create a new job and wrap it into a Cortex compatible type.
 
+    It extracts all the required parameters and pass them to the job.
+
     The responder takes a nested dictionary as input.
     """
     logger.debug(f'Event received from TheHive: {event}')
-    kwargs = {
+    # extract worker parameters
+    try:
+        kwargs = {
             'worker_id': id,
-            'object_type': event['dataType'],
-            'object_id': event['data']['id'],
-    }
-    try:
-        kwargs['context_id'] = event['data']['alert']['id']
-        kwargs['context_type'] = 'alert'
-    except KeyError:
-        pass
-    try:
-        kwargs['context_id'] = event['data']['case']['id']
-        kwargs['context_type'] = 'case'
-    except KeyError:
-        pass
+        }
+
+        # extract observable parameters
+        if event['dataType'] == 'thehive:case_artifact':
+            kwargs['object_type'] = event['data']['dataType']
+            kwargs['object_id'] = event['data']['id']
+            try:
+                kwargs['context_id'] = event['data']['alert']['id']
+                kwargs['context_type'] = 'alert'
+
+            except KeyError:
+                kwargs['context_id'] = event['data']['case']['id']
+                kwargs['context_type'] = 'case'
+
+        # extract alert parameters
+        if event['dataType'] == 'thehive:alert':
+            kwargs['object_type'] = 'alert'
+            kwargs['object_id'] = event['data']['id']
+
+        # extract case parameters
+        if event['dataType'] == 'thehive:case':
+            kwargs['object_type'] = 'case'
+            kwargs['object_id'] = event['data']['id']
+
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f'Missing {e}')
+
+    user = event['parameters']['user']
+    audit.info(f"{user} triggered responder {id} on {kwargs['object_type']} id {kwargs['object_id']}")
 
     return CortexJob.create(**kwargs)
 
