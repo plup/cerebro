@@ -1,5 +1,5 @@
 import pytest
-from cerebro.models import Worker, K8sJob, WorkerConfigurationError, JobExecutionError
+from cerebro.models.base import Worker, K8sJob, WorkerConfigurationError, JobExecutionError
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
 
 class TestWorker():

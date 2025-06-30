@@ -54,6 +54,7 @@ def test_run_responder_with_case(default_workers, k8s_create_job):
                 'updatedBy': 'somebody@nowhere.io'
             },
         },
+        'parameters': {'organisation': 'org', 'user': 'nobody@nowhere.io'},
     }
     r = client.post('/api/responder/foo/run', json=case_artifact)
     assert r.status_code == 200
@@ -82,6 +83,7 @@ def test_run_responder_with_alert(default_workers, k8s_create_job):
                 'updatedBy': 'somebody@nowhere.io'
             },
         },
+        'parameters': {'organisation': 'org', 'user': 'nobody@nowhere.io'},
     }
     r = client.post('/api/responder/foo/run', json=artifact)
     assert r.status_code == 200

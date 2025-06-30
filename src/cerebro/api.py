@@ -4,11 +4,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 from importlib.metadata import version
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
-from cerebro.models.base import WorkerNotFoundError
+from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
 
-app = FastAPI(title='cerebro')
 logger = logging.getLogger(__name__)
 audit = logging.getLogger('audit')
+app = FastAPI(title='cerebro')
 
 ## Status polling
 
@@ -57,42 +57,19 @@ def run_responder(id: str, event: dict) -> CortexJob:
 
     The responder takes a nested dictionary as input.
     """
-    logger.debug(f'Event received from TheHive: {event}')
-    # extract worker parameters
     try:
-        kwargs = {
-            'worker_id': id,
-        }
-
-        # extract observable parameters
-        if event['dataType'] == 'thehive:case_artifact':
-            kwargs['object_type'] = event['data']['dataType']
-            kwargs['object_id'] = event['data']['id']
-            try:
-                kwargs['context_id'] = event['data']['alert']['id']
-                kwargs['context_type'] = 'alert'
-
-            except KeyError:
-                kwargs['context_id'] = event['data']['case']['id']
-                kwargs['context_type'] = 'case'
-
-        # extract alert parameters
-        if event['dataType'] == 'thehive:alert':
-            kwargs['object_type'] = 'alert'
-            kwargs['object_id'] = event['data']['id']
-
-        # extract case parameters
-        if event['dataType'] == 'thehive:case':
-            kwargs['object_type'] = 'case'
-            kwargs['object_id'] = event['data']['id']
+        logger.debug(f'Event received from TheHive: {event}')
+        user = event['parameters']['user']
+        artefact = ThehiveArtefact.model_validate(event)
+        audit.info(f"{user} triggered responder {id} on {artefact.type} id {artefact.id}")
 
     except KeyError as e:
         raise HTTPException(status_code=400, detail=f'Missing {e}')
 
-    user = event['parameters']['user']
-    audit.info(f"{user} triggered responder {id} on {kwargs['object_type']} id {kwargs['object_id']}")
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    return CortexJob.create(**kwargs)
+    return CortexJob.create(worker_id=id, artefact=artefact)
 
 ## Jobs
 
