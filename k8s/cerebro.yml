@@ -37,6 +37,34 @@ data:
                       value: user@thehive.local
                     - name: TH_PASSWORD
                       value: secret
+  log.yml: |
+    version: 1
+    disable_existing_loggers: false
+    formatters:
+      simple:
+        format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    handlers:
+      console:
+        class : logging.StreamHandler
+        formatter: simple
+        level   : DEBUG
+        stream  : ext://sys.stdout
+    root:
+      level: WARNING # max level set to the handler
+      handlers: [console]
+    loggers:
+      uvicorn.error:
+        level: INFO
+        handlers: [console]
+        propagate: no
+      api:
+        level: DEBUG
+        handlers: [console]
+        propagate: no
+      cerebro:
+        level: DEBUG
+        handlers: [console]
+        propagate: no
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -99,12 +127,13 @@ spec:
     spec:
       serviceAccountName: cerebro
       volumes:
-        - name: workers
+        - name: config
           configMap:
             name: cerebro
       containers:
         - name: cerebro
           image: cerebro:latest
+          command: ["uvicorn", "cerebro.api:app", "--host", "0.0.0.0", "--log-config", "/etc/log.yml"]
           imagePullPolicy: Never
           ports:
             - containerPort: 8000
@@ -117,9 +146,13 @@ spec:
               cpu: 500m
               memory: 512Mi
           volumeMounts:
-            - name: workers
+            - name: config
               mountPath: /etc/workers.yml
               subPath: workers.yml
+              readOnly: true
+            - name: config
+              mountPath: /etc/log.yml
+              subPath: log.yml
               readOnly: true
           env:
             - name: WORKER_CONFIG

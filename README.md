@@ -24,19 +24,20 @@ $ export THEHIVE=http://localhost:30001
 
 ## Mount local files
 
-Use a `hostPath` to mount the code and run cerebro from the code itself:
+Add a `hostPath` to mount the code and run cerebro from the code itself:
 ```
-      containers:
-        - name: cerebro
-          command: ["uvicorn", "--app-dir", "src/cerebro", "api:app", "--host", "0.0.0.0", "--log-level", "debug"]
-
-          volumeMounts:
-            - name: host-volume
-              mountPath: /app
       volumes:
         - name: host-volume
           hostPath:
             path: /path/on/host
+      containers:
+        - name: cerebro
+          volumeMounts:
+            - name: host-volume
+              mountPath: /app
+           env:
++            - name: PYTHONPATH
++              value: /app/src
 ```
 
 Then reload the pods after a code change:
