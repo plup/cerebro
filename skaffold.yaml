@@ -24,3 +24,10 @@ build:
 manifests:
   rawYaml:
     - k8s/cerebro.yml
+# Rewrite the worker image in the ConfigMap (see .data.worker_image).
+# https://skaffold.dev/docs/tutorials/skaffold-resource-selector/
+resourceSelector:
+  allow:
+    - groupKind: ConfigMap
+      image: [".data.worker_image"]
+      labels: [".*"]

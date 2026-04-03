@@ -1,3 +1,4 @@
+import copy
 import logging
 import yaml
 import json
@@ -111,7 +112,13 @@ class K8sJob(BaseModel):
 
         # extend the manifest definition
         try:
-            manifest = worker.manifest
+            manifest = copy.deepcopy(worker.manifest)
+            try:
+                manifest['spec']['template']['spec']['containers'][0]['image'] = environ[
+                    'OVERRIDE_WORKER_IMAGE'
+                ]
+            except KeyError:
+                pass
             # keep track of data expected by thehive
             manifest['metadata']['annotations'] = {
                     'cerebro/worker': worker_id,

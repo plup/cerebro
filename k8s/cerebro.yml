@@ -4,6 +4,8 @@ kind: ConfigMap
 metadata:
   name: cerebro
 data:
+  # Skaffold artifact name `worker` — replaced by resourceSelector with the built tag/digest.
+  worker_image: worker
   workers.yml: |
     - name: foo
       type: responder
@@ -25,7 +27,7 @@ data:
                 runAsUser: 65534
               containers:
                 - name: job
-                  image: reg-kakarot.chorse.space/devsecops/docker-images/cerebro/worker:dev@sha256:e553bf3c56f1c9c74fad91ed60c3da8b069cbdee405fc54b383a0fa73eb2ee51
+                  image: worker
                   securityContext:
                     privileged: false
                     allowPrivilegeEscalation: false
@@ -173,5 +175,10 @@ spec:
               subPath: log.yml
               readOnly: true
           env:
+            - name: OVERRIDE_WORKER_IMAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: cerebro
+                  key: worker_image
             - name: WORKER_CONFIG
               value: /etc/workers.yml
