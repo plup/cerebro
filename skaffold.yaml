@@ -9,12 +9,18 @@ build:
     envTemplate:
       template: dev
   artifacts:
-    - image: cerebro
+    - image: server
       platforms:
         - linux/amd64
       context: .
       docker:
         dockerfile: k8s/cerebro.dock
+    - image: worker
+      platforms:
+        - linux/amd64
+      context: ./worker
+      docker:
+        dockerfile: Dockerfile
 manifests:
   rawYaml:
     - k8s/cerebro.yml

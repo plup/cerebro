@@ -22,12 +22,18 @@ data:
               restartPolicy: Never
               securityContext:
                 runAsNonRoot: True
-                runAsUser: 1000
+                runAsUser: 65534
               containers:
                 - name: job
-                  image: job:latest
-                  #command: ["sleep", "infinity"]
-                  imagePullPolicy: Never
+                  image: reg-kakarot.chorse.space/devsecops/docker-images/cerebro/worker:dev@sha256:e553bf3c56f1c9c74fad91ed60c3da8b069cbdee405fc54b383a0fa73eb2ee51
+                  securityContext:
+                    privileged: false
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                        - ALL
+                    seccompProfile:
+                      type: RuntimeDefault
                   env:
                     - name: TH_URL
                       value: http://thehive:9000
@@ -136,7 +142,7 @@ spec:
             name: cerebro
       containers:
         - name: cerebro
-          image: cerebro
+          image: server
           imagePullPolicy: IfNotPresent
           command: ["uvicorn", "cerebro.api:app", "--host", "0.0.0.0", "--log-config", "/etc/log.yml"]
           securityContext:
