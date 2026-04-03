@@ -15,8 +15,6 @@ data:
         kind: Job
         metadata:
           generateName: cerebro-job-
-          labels:
-            env: dev
         spec:
           backoffLimit: 0
           template:
@@ -126,15 +124,29 @@ spec:
         app: cerebro
     spec:
       serviceAccountName: cerebro
+      imagePullSecrets:
+        - name: kakarot-pull-creds-global
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       volumes:
         - name: config
           configMap:
             name: cerebro
       containers:
         - name: cerebro
-          image: cerebro:latest
+          image: cerebro
+          imagePullPolicy: IfNotPresent
           command: ["uvicorn", "cerebro.api:app", "--host", "0.0.0.0", "--log-config", "/etc/log.yml"]
-          imagePullPolicy: Never
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - containerPort: 8000
               name: http
