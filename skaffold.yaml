@@ -1,0 +1,20 @@
+---
+# https://skaffold.dev/docs/references/yaml/
+apiVersion: skaffold/v4beta13
+kind: Config
+metadata:
+  name: cerebro
+build:
+  tagPolicy:
+    envTemplate:
+      template: dev
+  artifacts:
+    - image: cerebro
+      platforms:
+        - linux/amd64
+      context: .
+      docker:
+        dockerfile: k8s/cerebro.dock
+manifests:
+  rawYaml:
+    - k8s/cerebro.yml
