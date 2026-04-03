@@ -1,3 +1,9 @@
+"""Core models for Cerebro.
+
+This module holds everything required for the orchestrator to run cleanly: workers, Kubernetes
+jobs, artefacts parsed from TheHive, and integration with the cluster API. It is intentionally
+independent of Cortex-specific API shapes.
+"""
 import copy
 import logging
 import yaml

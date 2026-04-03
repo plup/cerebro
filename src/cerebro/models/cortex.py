@@ -1,4 +1,9 @@
-"""Extend base models to match Cortex implementation."""
+"""Cortex-compatible façade over ``cerebro.models.base``.
+
+Cerebro is an in-place replacement for Cortex. The base model layer contains all and only what
+Cerebro needs to operate; this module extends those types so responses and job objects match what
+Cortex exposes (e.g. analyzers, responders, and ``CortexJob`` for TheHive).
+"""
 from pydantic import Field, computed_field, field_validator
 from .base import Worker, K8sJob
 
