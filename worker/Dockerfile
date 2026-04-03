@@ -1,4 +1,4 @@
 FROM python:3.11-slim
 RUN pip install requests
-COPY tests/job.py /job.py
+COPY job.py /job.py
 ENTRYPOINT ["python", "/job.py"]
