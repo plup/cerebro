@@ -90,7 +90,7 @@ def test_run_responder_with_alert(default_workers, k8s_create_job):
 
     manifest = k8s_create_job.call_args[0][1]
     assert (manifest['spec']['template']['spec']['containers'][0]['args'] ==
-            ['--object-type', 'thehive:case_artifact',
+            ['--object-type', 'observable:filename',
              '--object-id', '~1',
              '--context-type', 'alert',
              '--context-id', '~2']

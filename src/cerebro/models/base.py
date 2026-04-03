@@ -53,7 +53,7 @@ class Worker(BaseModel):
             return []
 
     @classmethod
-    def list(cls) -> list:
+    def list_workers(cls) -> list:
         """Return a list of configured workers."""
         workers = []
         for item in cls._load():
@@ -68,14 +68,14 @@ class Worker(BaseModel):
     @classmethod
     def search(cls, type=None, trigger=None) -> list:
         """Filter list of workers."""
-        return [w for w in cls.list() if not (type and w.type != type
+        return [w for w in cls.list_workers() if not (type and w.type != type
                                               or trigger and trigger not in w.triggers)]
 
     @classmethod
     def get(cls, name):
         """Get a worker by name."""
         try:
-            return next(w for w in cls.list() if w.name == name)
+            return next(w for w in cls.list_workers() if w.name == name)
         except StopIteration:
             raise WorkerNotFoundError()
 
