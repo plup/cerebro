@@ -5,4 +5,5 @@
 .env
 *.db
 venv/
+.venv/
 build/
