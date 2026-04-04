@@ -42,7 +42,35 @@ def get_alert():
 @app.get('/api/analyzer')
 def get_analyzers() -> list[Analyzer]:
     """Return the list of available analyzers."""
-    return [] # disable analysers from current implementation
+    return Analyzer.listall()
+
+@app.get('/api/analyzer/{id}')
+def get_analyzer(id: str) -> Analyzer:
+    """Return the configuration of the analyzer."""
+    try:
+        return Analyzer.get(id)
+    except WorkerNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post('/api/analyzer/{id}/run')
+def run_analyzer(id: str, event: dict) -> CortexJob:
+    """
+    Create a new job and wrap it into a Cortex compatible type.
+
+    The analyzer takes a nested dictionary as input (same shape as responders for observables).
+    """
+    try:
+        user = event['parameters']['user']
+        artefact = ThehiveArtefact.model_validate(event)
+        audit.info(f"{user} triggered analyzer {id} on {artefact.type} id {artefact.id}")
+
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f'Missing {e}')
+
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return CortexJob.create(worker_id=id, artefact=artefact)
 
 ## Responders
 
