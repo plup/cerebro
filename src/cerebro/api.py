@@ -1,7 +1,9 @@
 """This module contains all endpoints normally handled by Cortex and a webhook for TheHive."""
+import json
 import logging
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
+from starlette.requests import Request
 from importlib.metadata import version
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
 from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
@@ -9,6 +11,17 @@ from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
 logger = logging.getLogger(__name__)
 audit = logging.getLogger('audit')
 app = FastAPI(title='cerebro')
+
+@app.middleware("http")
+async def log_request_body(request: Request, call_next):
+    """Log JSON request bodies at DEBUG (Starlette caches body after first read)."""
+    if body := await request.body():
+        try:
+            text = json.loads(body.decode("utf-8"))
+            logger.debug(f"{request.method} {request.url.path} body: {text}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
+    return await call_next(request)
 
 ## Status polling
 
@@ -58,7 +71,6 @@ def run_responder(id: str, event: dict) -> CortexJob:
     The responder takes a nested dictionary as input.
     """
     try:
-        logger.debug(f'Event received from TheHive: {event}')
         user = event['parameters']['user']
         artefact = ThehiveArtefact.model_validate(event)
         audit.info(f"{user} triggered responder {id} on {artefact.type} id {artefact.id}")
