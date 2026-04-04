@@ -18,6 +18,16 @@ def test_polling():
 def test_list_analyzer(default_workers):
     r = client.get('/api/analyzer')
     assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]['name'] == 'bar'
+    assert data[0]['type'] == 'analyzer'
+
+
+def test_get_analyzer(default_workers):
+    r = client.get('/api/analyzer/bar')
+    assert r.status_code == 200
+    assert r.json()['name'] == 'bar'
 
 def test_list_responder(default_workers):
     r = client.post('/api/responder/_search')
