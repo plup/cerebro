@@ -1,16 +1,36 @@
 """This module contains all endpoints normally handled by Cortex and a webhook for TheHive."""
 import json
 import logging
-from fastapi import FastAPI, HTTPException
+from os import environ
+
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import ValidationError
 from starlette.requests import Request
 from importlib.metadata import version
+from cerebro.job_callback import store_job_report
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
 from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
 
 logger = logging.getLogger(__name__)
 audit = logging.getLogger('audit')
 app = FastAPI(title='cerebro')
+
+BEARER_PREFIX = 'Bearer '
+
+
+def verify_job_callback_token(authorization: str | None = Header(None)) -> None:
+    """Require ``Authorization: Bearer`` matching ``CEREBRO_CALLBACK_SECRET``."""
+    try:
+        expected = environ['CEREBRO_CALLBACK_SECRET']
+    except KeyError:
+        raise HTTPException(status_code=503, detail='Job callback is not configured')
+    if authorization is None:
+        raise HTTPException(status_code=401, detail='Missing Authorization header')
+    if not authorization.startswith(BEARER_PREFIX):
+        raise HTTPException(status_code=401, detail='Authorization must be a Bearer token')
+    token = authorization[len(BEARER_PREFIX):]
+    if token != expected:
+        raise HTTPException(status_code=403, detail='Invalid callback token')
 
 @app.middleware("http")
 async def log_request_body(request: Request, call_next):
@@ -118,6 +138,18 @@ def run_responder(id: str, event: dict) -> CortexJob:
     return CortexJob.create(worker_id=id, artefact=artefact)
 
 ## Jobs
+
+@app.post('/api/job/{id}/callback')
+def post_job_callback(id: str, body: dict, _: None = Depends(verify_job_callback_token)) -> dict:
+    """
+    Worker pods POST a Cortex-shaped report here when ``CEREBRO_CALLBACK_SECRET`` is set.
+
+    The JSON body is stored and returned from ``report`` on the job once Kubernetes reports the
+    job as Success or Failure (replacing the default log-derived report).
+    """
+    store_job_report(id, body)
+    return {'status': 'Ok'}
+
 
 @app.post('/api/job/status')
 def get_jobs_status(job_ids: dict) -> dict:

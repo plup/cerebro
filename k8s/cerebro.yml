@@ -17,6 +17,8 @@ data:
         kind: Job
         metadata:
           generateName: cerebro-job-
+          labels:
+            cerebro/worker: "true"
         spec:
           backoffLimit: 0
           template:
@@ -53,6 +55,8 @@ data:
         kind: Job
         metadata:
           generateName: cerebro-job-
+          labels:
+            cerebro/worker: "true"
         spec:
           backoffLimit: 0
           template:
@@ -218,3 +222,7 @@ spec:
                   key: worker_image
             - name: WORKER_CONFIG
               value: /etc/workers.yml
+            - name: CEREBRO_CALLBACK_URL
+              value: http://cerebro:8000
+            - name: CEREBRO_CALLBACK_SECRET
+              value: thesecrettoken

@@ -1,10 +1,42 @@
-import logging
 import argparse
+import logging
 import sys
 from os import environ
-from requests import Session
+
+import requests
+from requests import RequestException, Session
 from requests.exceptions import HTTPError
 from urllib.parse import urljoin
+
+logger = logging.getLogger(__name__)
+
+
+def post_cerebro_report(report: dict) -> None:
+    """
+    POST a Cortex-shaped report to Cerebro (no-op unless callback env vars are injected).
+
+    Requires ``CEREBRO_CALLBACK_URL``, ``CEREBRO_CALLBACK_TOKEN``, and ``CEREBRO_JOB_ID``.
+    """
+    base = environ.get('CEREBRO_CALLBACK_URL')
+    token = environ.get('CEREBRO_CALLBACK_TOKEN')
+    job_id = environ.get('CEREBRO_JOB_ID')
+    if not all([base, token, job_id]):
+        logger.info(
+            'Skipping Cerebro callback: set CEREBRO_CALLBACK_URL, CEREBRO_CALLBACK_TOKEN, '
+            'and CEREBRO_JOB_ID to post results'
+        )
+        return
+    url = f"{base.rstrip('/')}/api/job/{job_id}/callback"
+    logger.info(f'Posting report to Cerebro callback {url}')
+    r = requests.post(
+        url,
+        json=report,
+        headers={'Authorization': f'Bearer {token}'},
+        timeout=120,
+    )
+    r.raise_for_status()
+    logger.info(f'Cerebro callback accepted (HTTP {r.status_code})')
+
 
 class ThehiveClient(Session):
     def __init__(self,
@@ -27,7 +59,11 @@ class ThehiveClient(Session):
         return super().request(method, joined_url, *args, **kwargs)
 
 if __name__ == '__main__':
-    """Execute the job script with arguments passed from the runner."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s %(message)s',
+        stream=sys.stderr,
+    )
     try:
         # parse arguments
         parser = argparse.ArgumentParser(description='Run the job')
@@ -36,6 +72,11 @@ if __name__ == '__main__':
         parser.add_argument('--context-type', default=None, choices=['alert', 'case'])
         parser.add_argument('--context-id', default=None)
         args = parser.parse_args()
+
+        logger.info(
+            f'Worker starting object_type={args.object_type!r} object_id={args.object_id!r} '
+            f'context_type={args.context_type!r} context_id={args.context_id!r}'
+        )
 
         try:
             # initialize thehive client
@@ -71,6 +112,16 @@ if __name__ == '__main__':
         except HTTPError as e:
             print(f'Connection error: {e}')
             sys.exit(1)
+
+        try:
+            post_cerebro_report(
+                {
+                    'success': True,
+                    'full': {'message': 'dummy report from worker'},
+                }
+            )
+        except RequestException as e:
+            logger.warning(f'Callback to Cerebro failed: {e}')
 
     except Exception as e:
         print(f'Unhandled exception: {e}')

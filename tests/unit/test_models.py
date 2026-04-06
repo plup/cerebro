@@ -1,6 +1,7 @@
 import pytest
+from datetime import datetime
 from cerebro.models.base import Worker, K8sJob, ThehiveArtefact, WorkerConfigurationError, JobExecutionError
-from cerebro.models.cortex import Analyzer, Responder, CortexJob
+from cerebro.models.cortex import Analyzer, Responder, CortexJob, NO_CALLBACK_REPORT_MESSAGE
 
 class TestWorker():
     """Test the worker configuration."""
@@ -80,6 +81,59 @@ class TestThehiveArtefact():
                     'parameters': {'user': 'u@x'},
                 }
             )
+
+
+class TestCortexJobReport():
+    """Callback report overrides log-derived report when the job is finished."""
+
+    def test_report_uses_callback_payload_when_done(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        job = CortexJob(
+            id='j1',
+            worker=w,
+            object_type='observable:hostname',
+            status='Success',
+            started=datetime.now(),
+            message='',
+            callback_report={'success': True, 'full': {'message': 'from callback'}},
+        )
+        assert job.report['full']['message'] == 'from callback'
+
+    def test_report_placeholder_without_callback(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        ok = CortexJob(
+            id='j3',
+            worker=w,
+            object_type='observable:hostname',
+            status='Success',
+            started=datetime.now(),
+            message='',
+            callback_report=None,
+        )
+        assert ok.report == {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
+        bad = CortexJob(
+            id='j4',
+            worker=w,
+            object_type='observable:hostname',
+            status='Failure',
+            started=datetime.now(),
+            message='',
+            callback_report=None,
+        )
+        assert bad.report == {'success': False, 'errorMessage': NO_CALLBACK_REPORT_MESSAGE}
+
+    def test_report_ignores_callback_while_in_progress(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        job = CortexJob(
+            id='j2',
+            worker=w,
+            object_type='observable:hostname',
+            status='InProgress',
+            started=datetime.now(),
+            message='',
+            callback_report={'success': True, 'full': {'message': 'early'}},
+        )
+        assert job.report == {}
 
 
 class TestJob():

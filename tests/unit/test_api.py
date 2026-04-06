@@ -41,6 +41,30 @@ def test_get_nothing():
     r = client.get('/api/analyzer/nothing')
     assert r.status_code == 404
 
+
+def test_job_callback_stores_report(monkeypatch):
+    monkeypatch.setenv('CEREBRO_CALLBACK_SECRET', 'test-secret')
+    r = client.post(
+        '/api/job/my-job-id/callback',
+        json={'success': True, 'full': {'message': 'ok'}},
+        headers={'Authorization': 'Bearer test-secret'},
+    )
+    assert r.status_code == 200
+    from cerebro.job_callback import get_stored_report
+
+    assert get_stored_report('my-job-id') == {'success': True, 'full': {'message': 'ok'}}
+
+
+def test_job_callback_rejects_bad_token(monkeypatch):
+    monkeypatch.setenv('CEREBRO_CALLBACK_SECRET', 'test-secret')
+    r = client.post(
+        '/api/job/my-job-id/callback',
+        json={'success': True},
+        headers={'Authorization': 'Bearer wrong'},
+    )
+    assert r.status_code == 403
+
+
 def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
     """Cortex analyzer run: flat dataType + data string (TheHive default for observables)."""
     payload = {

@@ -14,10 +14,40 @@ from uuid import uuid4
 from datetime import datetime
 from pydantic import (BaseModel, Field, computed_field, field_validator, ValidationError,
                       ConfigDict, PrivateAttr)
-from fastapi import HTTPException
 from kubernetes import client, config, utils
 
+from cerebro.job_callback import get_stored_report
+
 logger = logging.getLogger(__name__)
+
+
+def inject_callback_env(manifest: dict) -> None:
+    """Add env vars so the worker can POST a Cortex report back (optional, requires secret and URL)."""
+    try:
+        secret = environ['CEREBRO_CALLBACK_SECRET']
+    except KeyError:
+        return
+    try:
+        base = environ['CEREBRO_CALLBACK_URL'].rstrip('/')
+    except KeyError:
+        logger.warning(
+            'CEREBRO_CALLBACK_SECRET is set but CEREBRO_CALLBACK_URL is missing; skipping callback env injection'
+        )
+        return
+    container = manifest['spec']['template']['spec']['containers'][0]
+    extra = [
+        {'name': 'CEREBRO_CALLBACK_URL', 'value': base},
+        {'name': 'CEREBRO_CALLBACK_TOKEN', 'value': secret},
+        {
+            'name': 'CEREBRO_JOB_ID',
+            'valueFrom': {'fieldRef': {'fieldPath': "metadata.labels['job-name']"}},
+        },
+    ]
+    env = container.setdefault('env', [])
+    existing = {e['name'] for e in env if isinstance(e, dict) and 'name' in e}
+    for item in extra:
+        if item['name'] not in existing:
+            env.append(item)
 
 
 class WorkerNotFoundError(RuntimeError):
@@ -96,6 +126,7 @@ class K8sJob(BaseModel):
     started: datetime
     ended: datetime | None = None
     message: str = ''
+    callback_report: dict | None = Field(default=None, exclude=True)
 
     @staticmethod
     def load_kube_config():
@@ -132,6 +163,8 @@ class K8sJob(BaseModel):
                     'cerebro/id': artefact.id,
                 }
 
+            inject_callback_env(manifest)
+
             # collect ids and type for the script exectuion
             args = ['--object-type', artefact.type, '--object-id', artefact.id]
             if artefact.ctx_type and artefact.ctx_id:
@@ -164,6 +197,7 @@ class K8sJob(BaseModel):
             object_type = artefact.type,
             status = 'Waiting',
             started = k8s_job.metadata.creation_timestamp,
+            callback_report = None,
         )
 
     @classmethod
@@ -198,32 +232,7 @@ class K8sJob(BaseModel):
             else:
                 status = 'Success'
 
-            # format a message from the logs
-            try:
-                # get the related pod
-                uid = k8s_job.metadata.uid
-                pod = client.CoreV1Api().list_namespaced_pod(
-                        namespace = namespace,
-                        label_selector = f'batch.kubernetes.io/controller-uid={uid}',
-                        timeout_seconds = 10
-                    ).items[0]
-
-                # get the pod logs
-                logs = client.CoreV1Api().read_namespaced_pod_log(
-                        name = pod.metadata.name,
-                        namespace = namespace,
-                        _return_http_data_only = True,
-                        _preload_content = False
-                    ).data.decode()
-
-                message = f'{job_id}: {logs.splitlines()[-1]}'
-
-            except client.exceptions.ApiException as e:
-                logger.warning(e)
-                message = f'{job_id} logs are not accessible'
-
-            except IndexError:
-                message = f'{job_id} didn\'t log anything'
+            message = ''
 
         return cls(
             id = job_id,
@@ -233,6 +242,7 @@ class K8sJob(BaseModel):
             started = k8s_job.metadata.creation_timestamp,
             ended = k8s_job.status.completion_time,
             message = message,
+            callback_report = get_stored_report(job_id),
         )
 
 class ThehiveArtefact(BaseModel):
