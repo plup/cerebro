@@ -13,7 +13,7 @@ from typing import Any
 from uuid import uuid4
 from datetime import datetime
 from pydantic import (BaseModel, Field, computed_field, field_validator, ValidationError,
-                      ConfigDict, PrivateAttr, model_validator)
+                      ConfigDict, PrivateAttr)
 from fastapi import HTTPException
 from kubernetes import client, config, utils
 
@@ -236,27 +236,24 @@ class K8sJob(BaseModel):
         )
 
 class ThehiveArtefact(BaseModel):
+    """
+    Normalized target for a Cerebro job (Kubernetes worker args).
+
+    Cortex **analyzer** runs use :meth:`from_analyzer_event` (flat observable: ``dataType`` +
+    ``data``). **Responder** runs use :meth:`from_responder_event` (nested ``thehive:*`` objects).
+    """
     type: str
     id: str
     ctx_type: str = ''
     ctx_id: str = ''
 
-    @model_validator(mode='before')
     @classmethod
-    def parse(cls, event: Any) -> Any:
-        """
-        Parse event and return a simplified object representing the artefact sent by TheHive.
-
-        This is an attempt to unify the analyzers and responders inputs by flattening them.
-        It only keeps track of the object types and ids leaving to the job the charge to make
-        a request to get the details.
-        It also keeps the alert or case id for observables because TheHive doesn't provide a way
-        to get them from the observable itself.
-        """
+    def from_responder_event(cls, event: Any) -> 'ThehiveArtefact':
+        """Build from ``POST /api/responder/.../run`` bodies (nested TheHive object references)."""
         try:
             artefact: dict[str, str] = {}
             dt = event['dataType']
-            # Responder-style nested payloads (TheHive object references)
+            # Nested payloads (TheHive object references)
             if dt == 'thehive:case_artifact':
                 artefact['type'] = 'observable:' + event['data']['dataType']
                 artefact['id'] = event['data']['id']
@@ -276,36 +273,47 @@ class ThehiveArtefact(BaseModel):
                 artefact['type'] = 'case'
                 artefact['id'] = event['data']['id']
 
-            elif not str(dt).startswith('thehive:'):
-                # Flat Cortex analyzer run body: dataType is the observable type (e.g. hostname,
-                # domain), data is the value string; optional message often carries case context.
-                artefact['type'] = f'observable:{dt}'
-                data_val = event.get('data')
-                if isinstance(data_val, str) and data_val != '':
-                    oid = event.get('id') or event.get('artifactId')
-                    artefact['id'] = oid if oid is not None else data_val
-                elif isinstance(event.get('attachment'), dict):
-                    att = event['attachment']
-                    aid = att.get('id')
-                    if aid is None:
-                        raise ValueError('Payload malformed: attachment needs id')
-                    oid = event.get('id') or event.get('artifactId')
-                    artefact['id'] = oid if oid is not None else str(aid)
-                else:
-                    raise ValueError('Payload malformed: analyzer run needs string data or attachment id')
-
-                msg = event.get('message')
-                if msg is not None and str(msg) != '':
-                    artefact['ctx_type'] = 'case'
-                    artefact['ctx_id'] = str(msg)
-
             else:
-                raise ValueError(f'Payload malformed: unsupported dataType {dt!r}')
+                raise ValueError(f'Responder payload: unsupported dataType {dt!r}')
 
-            if not artefact:
-                raise ValueError('Payload malformed: empty artefact')
+            return cls.model_validate(artefact)
 
-            return artefact
+        except KeyError as e:
+            logger.error(f"Payload malformed, missing {e}")
+            raise ValueError("Payload malformed")
+
+    @classmethod
+    def from_analyzer_event(cls, event: Any) -> 'ThehiveArtefact':
+        """Build from ``POST /api/analyzer/.../run`` bodies (flat Cortex analyzer run)."""
+        try:
+            dt = event['dataType']
+            if str(dt).startswith('thehive:'):
+                raise ValueError(
+                    f'Analyzer runs expect a flat observable (dataType + data); got {dt!r}'
+                )
+
+            artefact: dict[str, str] = {}
+            artefact['type'] = f'observable:{dt}'
+            data_val = event.get('data')
+            if isinstance(data_val, str) and data_val != '':
+                oid = event.get('id') or event.get('artifactId')
+                artefact['id'] = oid if oid is not None else data_val
+            elif isinstance(event.get('attachment'), dict):
+                att = event['attachment']
+                aid = att.get('id')
+                if aid is None:
+                    raise ValueError('Payload malformed: attachment needs id')
+                oid = event.get('id') or event.get('artifactId')
+                artefact['id'] = oid if oid is not None else str(aid)
+            else:
+                raise ValueError('Payload malformed: analyzer run needs string data or attachment id')
+
+            msg = event.get('message')
+            if msg is not None and str(msg) != '':
+                artefact['ctx_type'] = 'case'
+                artefact['ctx_id'] = str(msg)
+
+            return cls.model_validate(artefact)
 
         except KeyError as e:
             logger.error(f"Payload malformed, missing {e}")

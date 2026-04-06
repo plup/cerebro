@@ -43,7 +43,7 @@ data:
                       value: user@thehive.local
                     - name: TH_PASSWORD
                       value: secret
-    - name: foo
+    - name: bar
       type: analyzer
       triggers:
         - observable:filename
