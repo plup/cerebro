@@ -7,6 +7,9 @@ Cortex exposes (e.g. analyzers, responders, and ``CortexJob`` for TheHive).
 from pydantic import Field, computed_field, field_validator
 from .base import Worker, K8sJob
 
+# Shown in ``report`` when the job finished without a callback payload (Cortex-compatible text).
+NO_CALLBACK_REPORT_MESSAGE = 'No report has been generated.'
+
 
 class Analyzer(Worker):
     @computed_field
@@ -123,12 +126,15 @@ class CortexJob(K8sJob):
         """
         Generate a report for TheHive.
 
-        Responders can't display long result so we limit the output to a simple message.
-        "success: <true|false>" is returned by Cortex but seems to be ignored by TheHive.
+        If the worker posted a JSON body to ``POST /api/job/{id}/callback``, that dict is used
+        once the job has finished (Success or Failure). Otherwise a placeholder message is used
+        (pod logs are not surfaced here).
         """
+        if self.callback_report is not None and self.status in ('Success', 'Failure'):
+            return self.callback_report
         if self.status == 'Failure':
-            return {'success': False, 'errorMessage': self.message}
+            return {'success': False, 'errorMessage': NO_CALLBACK_REPORT_MESSAGE}
         elif self.status == 'Success':
-            return {'success': True, 'full': {'message': self.message}}
+            return {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
         else:
             return {}
