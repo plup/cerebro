@@ -43,6 +43,42 @@ data:
                       value: user@thehive.local
                     - name: TH_PASSWORD
                       value: secret
+    - name: foo
+      type: analyzer
+      triggers:
+        - observable:filename
+        - observable:hostname
+      manifest:
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          generateName: cerebro-job-
+        spec:
+          backoffLimit: 0
+          template:
+            spec:
+              restartPolicy: Never
+              securityContext:
+                runAsNonRoot: True
+                runAsUser: 65534
+              containers:
+                - name: job
+                  image: worker
+                  securityContext:
+                    privileged: false
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                        - ALL
+                    seccompProfile:
+                      type: RuntimeDefault
+                  env:
+                    - name: TH_URL
+                      value: http://thehive:9000
+                    - name: TH_USER
+                      value: user@thehive.local
+                    - name: TH_PASSWORD
+                      value: secret
   log.yml: |
     version: 1
     disable_existing_loggers: false
