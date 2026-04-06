@@ -254,9 +254,10 @@ class ThehiveArtefact(BaseModel):
         to get them from the observable itself.
         """
         try:
-            artefact = {}
-            # extract observable parameters with alert or case context
-            if event['dataType'] == 'thehive:case_artifact':
+            artefact: dict[str, str] = {}
+            dt = event['dataType']
+            # Responder-style nested payloads (TheHive object references)
+            if dt == 'thehive:case_artifact':
                 artefact['type'] = 'observable:' + event['data']['dataType']
                 artefact['id'] = event['data']['id']
                 try:
@@ -267,15 +268,42 @@ class ThehiveArtefact(BaseModel):
                     artefact['ctx_id'] = event['data']['case']['id']
                     artefact['ctx_type'] = 'case'
 
-            # extract alert parameters
-            if event['dataType'] == 'thehive:alert':
+            elif dt == 'thehive:alert':
                 artefact['type'] = 'alert'
                 artefact['id'] = event['data']['id']
 
-            # extract case parameters
-            if event['dataType'] == 'thehive:case':
+            elif dt == 'thehive:case':
                 artefact['type'] = 'case'
                 artefact['id'] = event['data']['id']
+
+            elif not str(dt).startswith('thehive:'):
+                # Flat Cortex analyzer run body: dataType is the observable type (e.g. hostname,
+                # domain), data is the value string; optional message often carries case context.
+                artefact['type'] = f'observable:{dt}'
+                data_val = event.get('data')
+                if isinstance(data_val, str) and data_val != '':
+                    oid = event.get('id') or event.get('artifactId')
+                    artefact['id'] = oid if oid is not None else data_val
+                elif isinstance(event.get('attachment'), dict):
+                    att = event['attachment']
+                    aid = att.get('id')
+                    if aid is None:
+                        raise ValueError('Payload malformed: attachment needs id')
+                    oid = event.get('id') or event.get('artifactId')
+                    artefact['id'] = oid if oid is not None else str(aid)
+                else:
+                    raise ValueError('Payload malformed: analyzer run needs string data or attachment id')
+
+                msg = event.get('message')
+                if msg is not None and str(msg) != '':
+                    artefact['ctx_type'] = 'case'
+                    artefact['ctx_id'] = str(msg)
+
+            else:
+                raise ValueError(f'Payload malformed: unsupported dataType {dt!r}')
+
+            if not artefact:
+                raise ValueError('Payload malformed: empty artefact')
 
             return artefact
 
