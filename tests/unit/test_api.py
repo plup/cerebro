@@ -41,6 +41,23 @@ def test_get_nothing():
     r = client.get('/api/analyzer/nothing')
     assert r.status_code == 404
 
+def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
+    """Cortex analyzer run: flat dataType + data string (TheHive default for observables)."""
+    payload = {
+        'tlp': 2,
+        'pap': 2,
+        'dataType': 'hostname',
+        'message': '~2',
+        'data': 'VJ2C9N',
+        'parameters': {'organisation': 'org', 'user': 'nobody@nowhere.io'},
+    }
+    r = client.post('/api/analyzer/bar/run', json=payload)
+    assert r.status_code == 200
+    body = r.json()
+    assert 'id' in body
+    assert body.get('status') == 'Waiting'
+
+
 def test_run_responder_with_case(default_workers, k8s_create_job):
     """Run a responder with a case artifact."""
     case_artifact = {

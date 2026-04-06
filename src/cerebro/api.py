@@ -57,15 +57,18 @@ def run_analyzer(id: str, event: dict) -> CortexJob:
     """
     Create a new job and wrap it into a Cortex compatible type.
 
-    The analyzer takes a nested dictionary as input (same shape as responders for observables).
+    TheHive sends a flat Cortex analyzer body (observable ``dataType`` and ``data`` string).
     """
     try:
         user = event['parameters']['user']
-        artefact = ThehiveArtefact.model_validate(event)
+        artefact = ThehiveArtefact.from_analyzer_event(event)
         audit.info(f"{user} triggered analyzer {id} on {artefact.type} id {artefact.id}")
 
     except KeyError as e:
         raise HTTPException(status_code=400, detail=f'Missing {e}')
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -100,11 +103,14 @@ def run_responder(id: str, event: dict) -> CortexJob:
     """
     try:
         user = event['parameters']['user']
-        artefact = ThehiveArtefact.model_validate(event)
+        artefact = ThehiveArtefact.from_responder_event(event)
         audit.info(f"{user} triggered responder {id} on {artefact.type} id {artefact.id}")
 
     except KeyError as e:
         raise HTTPException(status_code=400, detail=f'Missing {e}')
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -119,10 +125,12 @@ def get_jobs_status(job_ids: dict) -> dict:
     status = {}
     for _id in job_ids['jobIds']:
         status[_id] = CortexJob.fetch(_id).status
+    logger.debug(f'Status returned: {status}')
     return status
 
 @app.get('/api/job/{id}/waitreport')
 def get_job_report(id: str) -> CortexJob:
     """Return the CortexJob including a report."""
-    logger.debug(f'Result returned by Cerebro: {CortexJob.fetch(id)}')
-    return CortexJob.fetch(id)
+    job = CortexJob.fetch(id)
+    logger.debug(f'Job returned: {job.model_dump()}')
+    return job
