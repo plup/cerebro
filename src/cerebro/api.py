@@ -1,36 +1,19 @@
-"""This module contains all endpoints normally handled by Cortex and a webhook for TheHive."""
+"""FastAPI application: Cortex-compatible API for TheHive plus internal worker callbacks."""
 import json
 import logging
-from os import environ
 
-from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import ValidationError
+from fastapi import FastAPI
 from starlette.requests import Request
-from importlib.metadata import version
-from cerebro.job_callback import store_job_report
-from cerebro.models.cortex import Analyzer, Responder, CortexJob
-from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
+
+from cerebro.routers import internal, thehive
 
 logger = logging.getLogger(__name__)
-audit = logging.getLogger('audit')
+
 app = FastAPI(title='cerebro')
 
-BEARER_PREFIX = 'Bearer '
+app.include_router(thehive.router)
+app.include_router(internal.router)
 
-
-def verify_job_callback_token(authorization: str | None = Header(None)) -> None:
-    """Require ``Authorization: Bearer`` matching ``CEREBRO_CALLBACK_SECRET``."""
-    try:
-        expected = environ['CEREBRO_CALLBACK_SECRET']
-    except KeyError:
-        raise HTTPException(status_code=503, detail='Job callback is not configured')
-    if authorization is None:
-        raise HTTPException(status_code=401, detail='Missing Authorization header')
-    if not authorization.startswith(BEARER_PREFIX):
-        raise HTTPException(status_code=401, detail='Authorization must be a Bearer token')
-    token = authorization[len(BEARER_PREFIX):]
-    if token != expected:
-        raise HTTPException(status_code=403, detail='Invalid callback token')
 
 @app.middleware("http")
 async def log_request_body(request: Request, call_next):
@@ -42,127 +25,3 @@ async def log_request_body(request: Request, call_next):
         except (UnicodeDecodeError, json.JSONDecodeError):
             pass
     return await call_next(request)
-
-## Status polling
-
-@app.get("/api/status")
-def status():
-    return {"versions": {"Cortex": version('cerebro')}}
-
-@app.get("/api/user/current")
-def current_user():
-    return {"status":"Ok", "id":"thehive"}
-
-@app.get("/api/alert")
-def get_alert():
-    return []
-
-## Analyzers
-
-@app.get('/api/analyzer')
-def get_analyzers() -> list[Analyzer]:
-    """Return the list of available analyzers."""
-    return Analyzer.listall()
-
-@app.get('/api/analyzer/{id}')
-def get_analyzer(id: str) -> Analyzer:
-    """Return the configuration of the analyzer."""
-    try:
-        return Analyzer.get(id)
-    except WorkerNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-@app.post('/api/analyzer/{id}/run')
-def run_analyzer(id: str, event: dict) -> CortexJob:
-    """
-    Create a new job and wrap it into a Cortex compatible type.
-
-    TheHive sends a flat Cortex analyzer body (observable ``dataType`` and ``data`` string).
-    """
-    try:
-        user = event['parameters']['user']
-        artefact = ThehiveArtefact.from_analyzer_event(event)
-        audit.info(f"{user} triggered analyzer {id} on {artefact.type} id {artefact.id}")
-
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=f'Missing {e}')
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return CortexJob.create(worker_id=id, artefact=artefact)
-
-## Responders
-
-@app.post("/api/responder/_search")
-def get_responders() -> list[Responder]:
-    """Return the list of available responders."""
-    return Responder.listall()
-
-@app.get('/api/responder/{id}')
-def get_responder(id: str) -> Responder:
-    """Return the configuration of the responder."""
-    # seems to be sending the name instead of the id
-    try:
-        return Responder.get(id)
-
-    except WorkerNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-@app.post('/api/responder/{id}/run')
-def run_responder(id: str, event: dict) -> CortexJob:
-    """
-    Create a new job and wrap it into a Cortex compatible type.
-
-    It extracts all the required parameters and pass them to the job.
-
-    The responder takes a nested dictionary as input.
-    """
-    try:
-        user = event['parameters']['user']
-        artefact = ThehiveArtefact.from_responder_event(event)
-        audit.info(f"{user} triggered responder {id} on {artefact.type} id {artefact.id}")
-
-    except KeyError as e:
-        raise HTTPException(status_code=400, detail=f'Missing {e}')
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    return CortexJob.create(worker_id=id, artefact=artefact)
-
-## Jobs
-
-@app.post('/api/job/{id}/callback')
-def post_job_callback(id: str, body: dict, _: None = Depends(verify_job_callback_token)) -> dict:
-    """
-    Worker pods POST a Cortex-shaped report here when ``CEREBRO_CALLBACK_SECRET`` is set.
-
-    The JSON body is stored and returned from ``report`` on the job once Kubernetes reports the
-    job as Success or Failure (replacing the default log-derived report).
-    """
-    store_job_report(id, body)
-    return {'status': 'Ok'}
-
-
-@app.post('/api/job/status')
-def get_jobs_status(job_ids: dict) -> dict:
-    """Return the status for the jobs."""
-    status = {}
-    for _id in job_ids['jobIds']:
-        status[_id] = CortexJob.fetch(_id).status
-    logger.debug(f'Status returned: {status}')
-    return status
-
-@app.get('/api/job/{id}/waitreport')
-def get_job_report(id: str) -> CortexJob:
-    """Return the CortexJob including a report."""
-    job = CortexJob.fetch(id)
-    logger.debug(f'Job returned: {job.model_dump()}')
-    return job
