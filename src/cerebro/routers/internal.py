@@ -3,7 +3,7 @@ from os import environ
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-from cerebro.job_callback import store_job_report
+from cerebro.callback import store_job_report
 
 router = APIRouter(tags=['internal'])
 

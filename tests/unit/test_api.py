@@ -50,7 +50,7 @@ def test_job_callback_stores_report(monkeypatch):
         headers={'Authorization': 'Bearer test-secret'},
     )
     assert r.status_code == 200
-    from cerebro.job_callback import get_stored_report
+    from cerebro.callback import get_stored_report
 
     assert get_stored_report('my-job-id') == {'success': True, 'full': {'message': 'ok'}}
 

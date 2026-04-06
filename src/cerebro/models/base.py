@@ -16,7 +16,7 @@ from pydantic import (BaseModel, Field, computed_field, field_validator, Validat
                       ConfigDict, PrivateAttr)
 from kubernetes import client, config, utils
 
-from cerebro.job_callback import get_stored_report
+from cerebro.callback import get_stored_report
 
 logger = logging.getLogger(__name__)
 
