@@ -56,6 +56,7 @@ def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
     body = r.json()
     assert 'id' in body
     assert body.get('status') == 'Waiting'
+    assert body.get('dataType') == 'hostname'
 
 
 def test_run_responder_with_case(default_workers, k8s_create_job):

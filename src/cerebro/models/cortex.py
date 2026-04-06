@@ -46,8 +46,11 @@ class CortexJob(K8sJob):
     @computed_field
     @property
     def dataType(self) -> str:
-        """Rename the object type."""
-        return self.object_type
+        """Cortex-facing datatype (internal ``object_type`` uses ``observable:`` for analyzers)."""
+        ot = self.object_type
+        if self.worker.type == 'analyzer' and ot.startswith('observable:'):
+            return ot.removeprefix('observable:')
+        return ot
 
     @computed_field
     @property
