@@ -49,9 +49,12 @@ class CortexJob(K8sJob):
     @computed_field
     @property
     def dataType(self) -> str:
-        """Cortex-facing datatype (internal ``object_type`` uses ``observable:`` for analyzers)."""
+        """
+        Short Cortex type for TheHive (``hostname``, ``ip``, …). When ``object_type`` is an
+        observable, it is stored with the ``observable:`` prefix and stripped here.
+        """
         ot = self.object_type
-        if self.worker.type == 'analyzer' and ot.startswith('observable:'):
+        if ot.startswith('observable:'):
             return ot.removeprefix('observable:')
         return ot
 
