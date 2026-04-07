@@ -161,12 +161,26 @@ class K8sJob(BaseModel):
                     'cerebro/worker': worker_id,
                     'cerebro/type': artefact.type,
                     'cerebro/id': artefact.id,
+                    'cerebro/invocation-type': worker.type,
                 }
 
             inject_callback_env(manifest)
 
+            container = manifest['spec']['template']['spec']['containers'][0]
+            env = container.setdefault('env', [])
+            existing = {e['name'] for e in env if isinstance(e, dict) and 'name' in e}
+            if 'CEREBRO_INVOCATION_TYPE' not in existing:
+                env.append({'name': 'CEREBRO_INVOCATION_TYPE', 'value': worker.type})
+
             # collect ids and type for the script exectuion
-            args = ['--object-type', artefact.type, '--object-id', artefact.id]
+            args = [
+                '--invocation-type',
+                worker.type,
+                '--object-type',
+                artefact.type,
+                '--object-id',
+                artefact.id,
+            ]
             if artefact.ctx_type and artefact.ctx_id:
                 args.extend(['--context-type', artefact.ctx_type, '--context-id', artefact.ctx_id])
 
