@@ -87,7 +87,7 @@ def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
         '--invocation-type',
         'analyzer',
         '--object-type',
-        'hostname',
+        'observable:hostname',
         '--object-value',
         'VJ2C9N',
     ]

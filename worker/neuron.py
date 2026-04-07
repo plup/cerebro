@@ -20,6 +20,13 @@ def echo_cortex_data_type_and_data(object_type: str, object_id: str) -> tuple[st
     return object_type, object_id
 
 
+def observable_type_suffix(object_type: str) -> str:
+    """Cortex datatype without ``observable:`` (e.g. ``observable:ip`` → ``ip``)."""
+    if object_type.startswith('observable:'):
+        return object_type.removeprefix('observable:')
+    return object_type
+
+
 class ThehiveClient(requests.Session):
     """HTTP session for TheHive (``TH_URL``, ``TH_KEY`` or ``TH_USER`` / ``TH_PASSWORD``)."""
 
@@ -80,8 +87,8 @@ class CerebroNeuron:
         parser.add_argument(
             '--object-type',
             help=(
-                'For analyzers: Cortex observable datatype (e.g. hostname, ip). '
-                'For responders: Cerebro artefact type (e.g. observable:filename, alert).'
+                'Observable targets use the observable: prefix (e.g. observable:hostname). '
+                'Responders may also use alert or case.'
             ),
         )
         parser.add_argument(
@@ -108,7 +115,8 @@ class CerebroNeuron:
     def build_analyzer_report(self) -> dict:
         object_type = self.args.object_type
         object_value = self.args.object_value
-        artifact_data = object_value if object_type == 'ip' else '192.0.2.10'
+        dt_suffix = observable_type_suffix(object_type)
+        artifact_data = object_value if dt_suffix == 'ip' else '192.0.2.10'
         return {
             'success': True,
             'summary': {

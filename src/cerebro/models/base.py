@@ -206,16 +206,11 @@ class K8sJob(BaseModel):
 
             # collect args for the job entrypoint (analyzers: observable value only; responders: entity + optional context)
             if worker.type == 'analyzer':
-                object_type = (
-                    artefact.type.removeprefix('observable:')
-                    if artefact.type.startswith('observable:')
-                    else artefact.type
-                )
                 args = [
                     '--invocation-type',
                     'analyzer',
                     '--object-type',
-                    object_type,
+                    artefact.type,
                     '--object-value',
                     artefact.data,
                 ]
@@ -312,8 +307,10 @@ class ThehiveArtefact(BaseModel):
     """
     Normalized target for a Cerebro job (Kubernetes worker args).
 
-    Cortex **analyzer** runs use :meth:`from_analyzer_event` (flat observable: ``dataType`` +
-    ``data``). **Responder** runs use :meth:`from_responder_event` (nested ``thehive:*`` objects).
+    Observable targets always use the ``observable:`` prefix (e.g. ``observable:hostname``) so they
+    are distinct from ``case`` and ``alert``. **Analyzer** runs use :meth:`from_analyzer_event`
+    (flat ``dataType`` + ``data`` in the request, stored as ``observable:`` + ``dataType``).
+    **Responders** use :meth:`from_responder_event` (nested ``thehive:*`` objects).
 
     For analyzers, ``data`` is always the raw observable value from the request (the ``data``
     field). ``id`` is only set from TheHive ``id`` or ``artifactId`` when present; it is never
