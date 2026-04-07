@@ -56,7 +56,10 @@ def run_analyzer(id: str, event: dict) -> CortexJob:
     try:
         user = event['parameters']['user']
         artefact = ThehiveArtefact.from_analyzer_event(event)
-        audit.info(f"{user} triggered analyzer {id} on {artefact.type} id {artefact.id}")
+        extra = f' artifact_id {artefact.id}' if artefact.id else ''
+        audit.info(
+            f"{user} triggered analyzer {id} on {artefact.type} data {artefact.data}{extra}"
+        )
 
     except KeyError as e:
         raise HTTPException(status_code=400, detail=f'Missing {e}')
