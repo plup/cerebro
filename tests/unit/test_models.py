@@ -54,12 +54,13 @@ class TestThehiveArtefact():
         event = {'tlp': 2, 'pap': 2, 'dataType': 'hostname', 'message': '5', 'data': 'VJ2C9N', 'parameters': {'organisation': 'blue team', 'user': 'user@thehive.local'}}
         artefact = ThehiveArtefact.from_analyzer_event(event)
         assert artefact.type == 'observable:hostname'
-        assert artefact.id == 'VJ2C9N'
+        assert artefact.id == ''
+        assert artefact.data == 'VJ2C9N'
         assert artefact.ctx_type == 'case'
         assert artefact.ctx_id == '5'
 
     def test_analyzer_flat_explicit_id(self):
-        """Prefer root id over data when TheHive sends an observable id."""
+        """TheHive ``id`` is stored separately from the observable ``data`` string."""
         event = {
             'tlp': 2,
             'pap': 2,
@@ -71,6 +72,7 @@ class TestThehiveArtefact():
         artefact = ThehiveArtefact.from_analyzer_event(event)
         assert artefact.type == 'observable:ip'
         assert artefact.id == '~999'
+        assert artefact.data == '1.2.3.4'
 
     def test_analyzer_rejects_nested_thehive_datatype(self):
         with pytest.raises(ValueError, match='flat observable'):

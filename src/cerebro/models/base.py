@@ -50,6 +50,37 @@ def inject_callback_env(manifest: dict) -> None:
             env.append(item)
 
 
+THEHIVE_WORKER_ENV_NAMES = ('TH_URL', 'TH_KEY', 'TH_USER', 'TH_PASSWORD')
+
+
+def inject_thehive_env(manifest: dict) -> None:
+    """
+    Apply TheHive settings from the Cerebro process environment to the worker container.
+
+    For each name present in ``os.environ``, the worker manifest is updated or extended so all
+    workers receive the same TheHive connection configuration as the Cerebro deployment.
+    Names not set in the orchestrator are left unchanged (any values from the worker manifest
+    stay in place).
+    """
+    container = manifest['spec']['template']['spec']['containers'][0]
+    env = container.setdefault('env', [])
+    index_by_name: dict[str, int] = {}
+    for i, entry in enumerate(env):
+        if isinstance(entry, dict) and 'name' in entry:
+            index_by_name[entry['name']] = i
+    for name in THEHIVE_WORKER_ENV_NAMES:
+        try:
+            value = environ[name]
+        except KeyError:
+            continue
+        pair = {'name': name, 'value': value}
+        if name in index_by_name:
+            env[index_by_name[name]] = pair
+        else:
+            env.append(pair)
+            index_by_name[name] = len(env) - 1
+
+
 class WorkerNotFoundError(RuntimeError):
     """The requested worker hasn't been found."""
 
@@ -165,6 +196,7 @@ class K8sJob(BaseModel):
                 }
 
             inject_callback_env(manifest)
+            inject_thehive_env(manifest)
 
             container = manifest['spec']['template']['spec']['containers'][0]
             env = container.setdefault('env', [])
@@ -172,17 +204,34 @@ class K8sJob(BaseModel):
             if 'CEREBRO_INVOCATION_TYPE' not in existing:
                 env.append({'name': 'CEREBRO_INVOCATION_TYPE', 'value': worker.type})
 
-            # collect ids and type for the script exectuion
-            args = [
-                '--invocation-type',
-                worker.type,
-                '--object-type',
-                artefact.type,
-                '--object-id',
-                artefact.id,
-            ]
-            if artefact.ctx_type and artefact.ctx_id:
-                args.extend(['--context-type', artefact.ctx_type, '--context-id', artefact.ctx_id])
+            # collect args for the job entrypoint (analyzers: observable value only; responders: entity + optional context)
+            if worker.type == 'analyzer':
+                object_type = (
+                    artefact.type.removeprefix('observable:')
+                    if artefact.type.startswith('observable:')
+                    else artefact.type
+                )
+                args = [
+                    '--invocation-type',
+                    'analyzer',
+                    '--object-type',
+                    object_type,
+                    '--object-value',
+                    artefact.data,
+                ]
+            else:
+                args = [
+                    '--invocation-type',
+                    'responder',
+                    '--object-type',
+                    artefact.type,
+                    '--object-id',
+                    artefact.id,
+                ]
+                if artefact.ctx_type and artefact.ctx_id:
+                    args.extend(
+                        ['--context-type', artefact.ctx_type, '--context-id', artefact.ctx_id]
+                    )
 
             # pass the args to the job entrypoint
             try:
@@ -265,9 +314,14 @@ class ThehiveArtefact(BaseModel):
 
     Cortex **analyzer** runs use :meth:`from_analyzer_event` (flat observable: ``dataType`` +
     ``data``). **Responder** runs use :meth:`from_responder_event` (nested ``thehive:*`` objects).
+
+    For analyzers, ``data`` is always the raw observable value from the request (the ``data``
+    field). ``id`` is only set from TheHive ``id`` or ``artifactId`` when present; it is never
+    copied from ``data``.
     """
     type: str
     id: str
+    data: str = ''
     ctx_type: str = ''
     ctx_id: str = ''
 
@@ -321,14 +375,20 @@ class ThehiveArtefact(BaseModel):
             data_val = event.get('data')
             if isinstance(data_val, str) and data_val != '':
                 oid = event.get('id') or event.get('artifactId')
-                artefact['id'] = oid if oid is not None else data_val
+                artefact['id'] = str(oid) if oid is not None else ''
+                artefact['data'] = data_val
             elif isinstance(event.get('attachment'), dict):
                 att = event['attachment']
                 aid = att.get('id')
                 if aid is None:
                     raise ValueError('Payload malformed: attachment needs id')
                 oid = event.get('id') or event.get('artifactId')
-                artefact['id'] = oid if oid is not None else str(aid)
+                artefact['id'] = str(oid) if oid is not None else ''
+                raw = event.get('data')
+                if isinstance(raw, str) and raw != '':
+                    artefact['data'] = raw
+                else:
+                    artefact['data'] = str(att.get('name') or att.get('filename') or aid)
             else:
                 raise ValueError('Payload malformed: analyzer run needs string data or attachment id')
 

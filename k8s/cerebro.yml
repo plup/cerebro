@@ -38,13 +38,6 @@ data:
                         - ALL
                     seccompProfile:
                       type: RuntimeDefault
-                  env:
-                    - name: TH_URL
-                      value: http://thehive:9000
-                    - name: TH_USER
-                      value: user@thehive.local
-                    - name: TH_PASSWORD
-                      value: secret
     - name: bar
       type: analyzer
       triggers:
@@ -76,13 +69,6 @@ data:
                         - ALL
                     seccompProfile:
                       type: RuntimeDefault
-                  env:
-                    - name: TH_URL
-                      value: http://thehive:9000
-                    - name: TH_USER
-                      value: user@thehive.local
-                    - name: TH_PASSWORD
-                      value: secret
   log.yml: |
     version: 1
     disable_existing_loggers: false
@@ -226,3 +212,9 @@ spec:
               value: http://cerebro:8000
             - name: CEREBRO_CALLBACK_SECRET
               value: thesecrettoken
+            - name: TH_URL
+              value: http://thehive:9000
+            - name: TH_USER
+              value: user@thehive.local
+            - name: TH_PASSWORD
+              value: secret
