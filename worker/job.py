@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from cerebro_neuron import CerebroNeuron
+from neuron import CerebroNeuron
 
 if __name__ == '__main__':
     logging.basicConfig(
