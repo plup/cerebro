@@ -14,13 +14,7 @@ from urllib.parse import urljoin
 logger = logging.getLogger(__name__)
 
 
-def echo_cortex_data_type_and_data(object_type: str, object_id: str) -> tuple[str, str]:
-    if object_type.startswith('observable:'):
-        return object_type.removeprefix('observable:'), object_id
-    return object_type, object_id
-
-
-def observable_type_suffix(object_type: str) -> str:
+def short_observable_type(object_type: str) -> str:
     """Cortex datatype without ``observable:`` (e.g. ``observable:ip`` → ``ip``)."""
     if object_type.startswith('observable:'):
         return object_type.removeprefix('observable:')
@@ -107,80 +101,7 @@ class CerebroNeuron:
             parser.error('responder runs require --object-type and --object-id')
         return ns
 
-    def build_report(self) -> dict:
-        if self.args.invocation_type == 'analyzer':
-            return self.build_analyzer_report()
-        return self.build_responder_report()
-
-    def build_analyzer_report(self) -> dict:
-        object_type = self.args.object_type
-        object_value = self.args.object_value
-        dt_suffix = observable_type_suffix(object_type)
-        artifact_data = object_value if dt_suffix == 'ip' else '192.0.2.10'
-        return {
-            'success': True,
-            'summary': {
-                'taxonomies': [
-                    {
-                        'namespace': 'Example',
-                        'predicate': object_type,
-                        'value': 'found',
-                        'level': 'info',
-                    },
-                ],
-            },
-            'full': {
-                'query': object_value,
-                'verdict': 'suspicious',
-                'details': {
-                    'first_seen': '2025-01-15T10:00:00Z',
-                },
-            },
-            'operations': [
-                {
-                    'type': 'AddTagToCase',
-                    'tag': 'From Action Operation',
-                },
-                {
-                    'type': 'CreateTask',
-                    'title': 'task created by action',
-                    'description': 'yop !',
-                },
-            ],
-            'artifacts': [
-                {
-                    'data': artifact_data,
-                    'dataType': 'ip',
-                    'message': None,
-                    'tags': ['example'],
-                    'tlp': 2,
-                },
-            ],
-        }
-
-    def build_responder_report(self) -> dict:
-        data_type, data = echo_cortex_data_type_and_data(self.args.object_type, self.args.object_id)
-        return {
-            'success': True,
-            'full': {
-                'data_type': data_type,
-                'data': data,
-                'message': f'Echo: received {data_type}',
-            },
-            'operations': [
-                {
-                    'type': 'AddTagToCase',
-                    'tag': 'From Action Operation',
-                },
-                {
-                    'type': 'CreateTask',
-                    'title': 'task created by action',
-                    'description': 'yop !',
-                },
-            ],
-        }
-
-    def post_callback(self, report: dict) -> None:
+    def send_report(self, report: dict) -> None:
         """
         POST a Cortex-shaped report to Cerebro (no-op unless callback env vars are injected).
 
@@ -218,7 +139,3 @@ class CerebroNeuron:
                 f'object_type={self.args.object_type!r} object_id={self.args.object_id!r} '
                 f'context_type={self.args.context_type!r} context_id={self.args.context_id!r}'
             )
-        try:
-            self.post_callback(self.build_report())
-        except RequestException as exc:
-            logger.warning(f'Callback to Cerebro failed: {exc}')
