@@ -23,7 +23,7 @@ class ThehiveClient(Client):
         password: str | None = None,
         *,
         timeout: float = 120.0,
-        verify: bool | str = True,
+        verify: bool = True,
         **kwargs: Any,
     ):
         base = base_url if base_url is not None else environ['TH_URL']
