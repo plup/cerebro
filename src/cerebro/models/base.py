@@ -9,6 +9,7 @@ import logging
 import yaml
 import json
 from os import environ
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from datetime import datetime
@@ -19,6 +20,70 @@ from kubernetes import client, config, utils
 from cerebro.callback import get_stored_report
 
 logger = logging.getLogger(__name__)
+
+# When ``WORKER_CONFIG`` is unset, load worker YAML from this path (matches the k8s Deployment).
+DEFAULT_WORKER_CONFIG_PATH = '/etc/cerebro/workers'
+
+
+def read_worker_config() -> list[dict[str, Any]]:
+    f"""
+    Read worker definitions from disk as plain dicts (before Pydantic validation).
+
+    Uses the ``WORKER_CONFIG`` environment variable; if unset, the path defaults to
+    ``{DEFAULT_WORKER_CONFIG_PATH}``. The path may be either a **file** or a **directory**.
+    A file contains one YAML mapping (one worker). A directory loads every ``*.yml`` and
+    ``*.yaml`` in sorted filename order, one mapping per file. Mount several ConfigMaps into
+    the same directory (for example with a projected volume) to ship one worker per ConfigMap.
+
+    Returns a list of dicts, or an empty list when nothing could be loaded; issues are logged
+    at warning or error level.
+    """
+    path = Path(environ.get('WORKER_CONFIG', DEFAULT_WORKER_CONFIG_PATH))
+
+    if not path.exists():
+        logger.warning(f'WORKER_CONFIG path does not exist: {path}')
+        return []
+
+    if path.is_dir():
+        merged: list[dict[str, Any]] = []
+        worker_files = sorted(
+            (*path.glob('*.yml'), *path.glob('*.yaml')),
+            key=lambda p: p.name,
+        )
+        for file_path in worker_files:
+            try:
+                with open(file_path, encoding='utf-8') as fh:
+                    raw = yaml.safe_load(fh)
+            except OSError as e:
+                logger.error(f'Could not read worker file {file_path}: {e}')
+                continue
+            except yaml.YAMLError as e:
+                logger.error(f'Invalid YAML in worker file {file_path}: {e}')
+                continue
+            if not isinstance(raw, dict):
+                got = type(raw).__name__
+                logger.error(
+                    f'Worker file {file_path} must contain a YAML mapping; got {got}'
+                )
+                continue
+            merged.append(raw)
+        return merged
+
+    try:
+        with open(path, encoding='utf-8') as f:
+            raw = yaml.safe_load(f)
+    except OSError as e:
+        logger.error(f'Could not read WORKER_CONFIG {path}: {e}')
+        return []
+    except yaml.YAMLError as e:
+        logger.error(f'Invalid YAML in WORKER_CONFIG {path}: {e}')
+        return []
+
+    if not isinstance(raw, dict):
+        got = type(raw).__name__
+        logger.error(f'WORKER_CONFIG {path} must contain a YAML mapping; got {got}')
+        return []
+    return [raw]
 
 
 def inject_callback_env(manifest: dict) -> None:
@@ -126,24 +191,10 @@ class Worker(BaseModel):
         return self.name
 
     @classmethod
-    def _load(cls) -> list:
-        """
-        Return the worker config without validation.
-
-        This is usefull for mocking in unit testing.
-        """
-        try:
-            with open(environ['WORKER_CONFIG'], 'r') as f:
-                return yaml.safe_load(f)
-        except KeyError:
-            logger.warning('WORKER_CONFIG path not set.')
-            return []
-
-    @classmethod
     def list_workers(cls) -> list:
         """Return a list of configured workers."""
         workers = []
-        for item in cls._load():
+        for item in read_worker_config():
             try:
                 workers.append(cls(**item))
 
