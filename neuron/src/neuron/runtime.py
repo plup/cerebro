@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from neuron.report import Report
 from neuron.thehive import ThehiveClient
 
 logger = logging.getLogger(__name__)
@@ -83,7 +84,7 @@ class CerebroNeuron:
             logger.warning('TheHive client not initialized: TH_URL is not set')
             return None
 
-    def send_report(self, report: dict) -> None:
+    def send_report(self, report: Report) -> None:
         """
         POST a Cortex-shaped report to Cerebro (no-op unless callback env vars are injected).
 
@@ -102,23 +103,9 @@ class CerebroNeuron:
         logger.info(f'Posting report to Cerebro callback {url}')
         r = httpx.post(
             url,
-            json=report,
+            json=report.to_dict(),
             headers={'Authorization': f'Bearer {token}'},
             timeout=120.0,
         )
         r.raise_for_status()
         logger.info(f'Cerebro callback accepted (HTTP {r.status_code})')
-
-    def run(self) -> None:
-        inv = self.invocation
-        if inv.role == 'analyzer':
-            logger.info(
-                f'Neuron starting role={inv.role!r} '
-                f'object_type={inv.object_type!r} object_value={inv.object_value!r}'
-            )
-        else:
-            logger.info(
-                f'Neuron starting role={inv.role!r} '
-                f'object_type={inv.object_type!r} object_id={inv.object_id!r} '
-                f'context_type={inv.context_type!r} context_id={inv.context_id!r}'
-            )

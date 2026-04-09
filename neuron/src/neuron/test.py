@@ -6,6 +6,7 @@ import sys
 
 import httpx
 
+from neuron.report import Report
 from neuron.runtime import CerebroNeuron
 
 
@@ -44,62 +45,43 @@ def main() -> None:
                     if observable_value is not None:
                         logging.info(f'Observable value from TheHive: {observable_value!r}')
 
-            report = {
-                'success': True,
-                'full': {
-                    # in responder context the report needs to be short
+            report = Report().set_details(
+                {
                     'message': (
                         f'Execution went well! value={observable_value!r}'
                         if observable_value is not None
                         else 'Execution went well!'
                     ),
-                },
-                'operations': [
-                    # operations require to identify with which entity
-                    # we are working with
-                ],
-            }
+                }
+            )
 
         elif neuron.invocation.role == 'analyzer':
             # Analyzers run on a single observable (type + value only).
             obs_type = neuron.invocation.object_type
             obs_value = neuron.invocation.object_value
 
-            report = {
-                'success': True,
-                'summary': {
-                    'taxonomies': [
-                        {
-                            'namespace': 'Example',
-                            'predicate': obs_type,
-                            'value': obs_value,
-                            'level': 'info',
-                        },
-                    ],
-                },
-                'full': {
-                    'query': 'anything',
-                    'details': {
-                        'first_seen': '2025-01-15T10:00:00Z',
-                    },
-                },
-                'operations': [
+            report = (
+                Report()
+                .add_taxonomy('Example', obs_type, obs_value)
+                .set_details(
                     {
-                        'type': 'AddTagToArtifact',
-                        'tag': 'analyzed',
-                    },
-                ],
-                'artifacts': [
-                    # this needs to map an analyzer observable in TheHive schema
+                        'query': 'anything',
+                        'details': {
+                            'first_seen': '2025-01-15T10:00:00Z',
+                        },
+                    }
+                )
+                .add_operation({'type': 'AddTagToArtifact', 'tag': 'analyzed'})
+                .add_artifact(
                     {
                         'data': obs_value,
                         'dataType': obs_type.removeprefix('observable:'),
                         'message': None,
                         'tags': ['example'],
                         'tlp': 2,
-                    },
-                ],
-            }
+                    }
+                )
+            )
         else:
             raise ValueError(f'unsupported CEREBRO_INVOCATION_TYPE {neuron.invocation.role!r}')
 
