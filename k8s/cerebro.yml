@@ -9,7 +9,7 @@ data:
   workers.yml: |
     - name: foo
       type: responder
-      description: Short text shown in TheHive for this responder
+      description: Test responder designed to run on observables
       triggers:
         - observable:filename
         - observable:hostname
@@ -39,8 +39,42 @@ data:
                         - ALL
                     seccompProfile:
                       type: RuntimeDefault
+    - name: fail
+      type: responder
+      description: Test responder designed to fail in kube
+      triggers:
+        - observable:filename
+        - observable:hostname
+      manifest:
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          generateName: cerebro-job-
+          labels:
+            cerebro/worker: "true"
+        spec:
+          backoffLimit: 0
+          template:
+            spec:
+              restartPolicy: Never
+              securityContext:
+                runAsNonRoot: True
+                runAsUser: 65534
+              containers:
+                - name: job
+                  image: worker
+                  command: ["false"]
+                  securityContext:
+                    privileged: false
+                    allowPrivilegeEscalation: false
+                    capabilities:
+                      drop:
+                        - ALL
+                    seccompProfile:
+                      type: RuntimeDefault
     - name: bar
       type: analyzer
+      description: Test analyzer designed to support all operations
       triggers:
         - observable:filename
         - observable:hostname

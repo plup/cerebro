@@ -172,7 +172,7 @@ class K8sJob(BaseModel):
     id: str
     worker: Worker
     object_type: str
-    status: str
+    kube_status: str
     started: datetime
     ended: datetime | None = None
     message: str = ''
@@ -246,7 +246,7 @@ class K8sJob(BaseModel):
             id = k8s_job.metadata.name,
             worker = worker,
             object_type = artefact.type,
-            status = 'Waiting',
+            kube_status = 'Waiting',
             started = k8s_job.metadata.creation_timestamp,
             callback_report = None,
         )
@@ -273,23 +273,26 @@ class K8sJob(BaseModel):
 
         if k8s_job.status.active:
             # nothing to return if the job is still executing
-            status = 'InProgress'
+            kube_status = 'InProgress'
             message = ''
 
         else:
             # map result conditions
             if k8s_job.status.failed and k8s_job.status.failed > 0:
-                status = 'Failure'
+                kube_status = 'Failure'
             else:
-                status = 'Success'
+                kube_status = 'Success'
 
-            message = ''
+            if kube_status == 'Failure':
+                message = f'Job failed; check the Kubernetes job {job_id}.'
+            else:
+                message = ''
 
         return cls(
             id = job_id,
             worker = worker,
             object_type = object_type,
-            status = status,
+            kube_status = kube_status,
             started = k8s_job.metadata.creation_timestamp,
             ended = k8s_job.status.completion_time,
             message = message,

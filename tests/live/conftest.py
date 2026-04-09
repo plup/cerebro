@@ -50,10 +50,11 @@ def live_thehive_client() -> Generator[Any, None, None]:
     user = os.environ.get('TH_USER')
     password = os.environ.get('TH_PASSWORD')
 
+    verify = bool(int(os.environ.get('TH_VERIFY', '1')))
     if key:
-        client = ThehiveClient(base_url=base, key=key)
+        client = ThehiveClient(base_url=base, key=key, verify=verify)
     elif user and password:
-        client = ThehiveClient(base_url=base, user=user, password=password)
+        client = ThehiveClient(base_url=base, user=user, password=password, verify=verify)
     else:
         pytest.skip(
             'TheHive auth: set THEHIVE_API_KEY or TH_KEY (Bearer), or TH_USER + TH_PASSWORD'

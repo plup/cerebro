@@ -85,12 +85,35 @@ class TestCortexJobReport():
             id='j1',
             worker=w,
             object_type='observable:hostname',
-            status='Success',
+            kube_status='Success',
             started=datetime.now(),
             message='',
             callback_report={'success': True, 'full': {'message': 'from callback'}},
         )
         assert job.report['full']['message'] == 'from callback'
+
+    def test_report_injects_success_when_callback_omits_key(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        ok = CortexJob(
+            id='j-ok',
+            worker=w,
+            object_type='observable:hostname',
+            kube_status='Success',
+            started=datetime.now(),
+            message='',
+            callback_report={'full': {'message': 'done'}},
+        )
+        assert ok.report == {'success': True, 'full': {'message': 'done'}}
+        bad = CortexJob(
+            id='j-bad',
+            worker=w,
+            object_type='observable:hostname',
+            kube_status='Failure',
+            started=datetime.now(),
+            message='',
+            callback_report={'full': {'message': 'failed'}},
+        )
+        assert bad.report == {'success': False, 'full': {'message': 'failed'}}
 
     def test_report_placeholder_without_callback(self):
         w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
@@ -98,7 +121,7 @@ class TestCortexJobReport():
             id='j3',
             worker=w,
             object_type='observable:hostname',
-            status='Success',
+            kube_status='Success',
             started=datetime.now(),
             message='',
             callback_report=None,
@@ -108,12 +131,27 @@ class TestCortexJobReport():
             id='j4',
             worker=w,
             object_type='observable:hostname',
-            status='Failure',
+            kube_status='Failure',
             started=datetime.now(),
             message='',
             callback_report=None,
         )
         assert bad.report == {'success': False, 'errorMessage': NO_CALLBACK_REPORT_MESSAGE}
+
+    def test_report_kube_failure_message_without_callback(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        job_name = 'j5'
+        hint = f'Job failed; check the Kubernetes job {job_name}.'
+        job = CortexJob(
+            id=job_name,
+            worker=w,
+            object_type='observable:hostname',
+            kube_status='Failure',
+            started=datetime.now(),
+            message=hint,
+            callback_report=None,
+        )
+        assert job.report == {'success': False, 'errorMessage': hint}
 
     def test_report_ignores_callback_while_in_progress(self):
         w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
@@ -121,12 +159,42 @@ class TestCortexJobReport():
             id='j2',
             worker=w,
             object_type='observable:hostname',
-            status='InProgress',
+            kube_status='InProgress',
             started=datetime.now(),
             message='',
             callback_report={'success': True, 'full': {'message': 'early'}},
         )
         assert job.report == {}
+
+
+class TestCortexJobStatus():
+    """``status`` for TheHive follows callback ``success`` when present, else ``kube_status``."""
+
+    def test_status_follows_callback_when_present(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        job = CortexJob(
+            id='j-cb',
+            worker=w,
+            object_type='observable:hostname',
+            kube_status='Success',
+            started=datetime.now(),
+            message='',
+            callback_report={'success': False, 'full': {'message': 'logic failure'}},
+        )
+        assert job.status == 'Failure'
+
+    def test_status_matches_kube_without_callback(self):
+        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
+        fail = CortexJob(
+            id='j-kf',
+            worker=w,
+            object_type='observable:hostname',
+            kube_status='Failure',
+            started=datetime.now(),
+            message='',
+            callback_report=None,
+        )
+        assert fail.status == 'Failure'
 
 
 class TestJob():
@@ -137,4 +205,4 @@ class TestJob():
             'foo',
             ThehiveArtefact.model_construct(type='thehive:case_artifact', id='~1'),
         )
-        assert job.status == 'Waiting'
+        assert job.kube_status == 'Waiting'

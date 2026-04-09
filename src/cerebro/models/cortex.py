@@ -4,7 +4,7 @@ Cerebro is an in-place replacement for Cortex. The base model layer contains all
 Cerebro needs to operate; this module extends those types so responses and job objects match what
 Cortex exposes (e.g. analyzers, responders, and ``CortexJob`` for TheHive).
 """
-from pydantic import Field, computed_field, field_validator
+from pydantic import Field, computed_field
 from .base import Worker, K8sJob
 
 # Shown in ``report`` when the job finished without a callback payload (Cortex-compatible text).
@@ -42,9 +42,31 @@ class CortexJob(K8sJob):
     Flatten related object properties to behave like Cortex.
 
     A CortexJob has all the properties required by TheHive.
+
+    ``kube_status`` is the Kubernetes Batch Job state (omitted from JSON for TheHive). ``status``
+    follows the callback report's ``success`` when a payload was posted; otherwise it matches
+    ``kube_status``.
     """
     worker: Worker = Field(exclude=True)
+    kube_status: str = Field(exclude=True)
     organization: str = '' # Cortex normally returns organization but it's apparently not checked by TheHive
+
+    @computed_field
+    @property
+    def status(self) -> str:
+        """
+        Status exposed to TheHive: from the callback ``success`` field when a report exists;
+        otherwise ``kube_status`` (still ``Waiting`` / ``InProgress`` while the pod runs).
+        """
+        ks = self.kube_status
+        if ks in ('Waiting', 'InProgress'):
+            return ks
+        if self.callback_report is not None:
+            cr = self.callback_report
+            if 'success' in cr:
+                return 'Success' if cr['success'] else 'Failure'
+            return 'Success' if ks == 'Success' else 'Failure'
+        return ks
 
     @computed_field
     @property
@@ -53,10 +75,7 @@ class CortexJob(K8sJob):
         Short Cortex type for TheHive (``hostname``, ``ip``, …). When ``object_type`` is an
         observable, it is stored with the ``observable:`` prefix and stripped here.
         """
-        ot = self.object_type
-        if ot.startswith('observable:'):
-            return ot.removeprefix('observable:')
-        return ot
+        return self.object_type.removeprefix('observable:')
 
     @computed_field
     @property
@@ -127,17 +146,28 @@ class CortexJob(K8sJob):
     @property
     def report(self) -> dict:
         """
-        Generate a report for TheHive.
+        Cortex-shaped report for TheHive.
 
-        If the worker posted a JSON body to ``POST /api/job/{id}/callback``, that dict is used
-        once the job has finished (Success or Failure). Otherwise a placeholder message is used
-        (pod logs are not surfaced here).
+        When the worker posted JSON to ``POST /api/job/{id}/callback``, that payload is returned
+        once the job has finished (``Success`` or ``Failure``). If the payload omits ``success``,
+        it is set from the Kubernetes job outcome (``True`` for ``Success``, ``False`` for
+        ``Failure``). With no callback, a minimal placeholder is used.
         """
-        if self.callback_report is not None and self.status in ('Success', 'Failure'):
-            return self.callback_report
-        if self.status == 'Failure':
-            return {'success': False, 'errorMessage': NO_CALLBACK_REPORT_MESSAGE}
-        elif self.status == 'Success':
-            return {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
-        else:
+        if self.kube_status in ('Waiting', 'InProgress'):
             return {}
+
+        if self.kube_status in ('Success', 'Failure') and self.callback_report is not None:
+            out = dict(self.callback_report)
+            if 'success' not in out:
+                out['success'] = self.kube_status == 'Success'
+            return out
+
+        if self.kube_status == 'Failure':
+            detail = (self.message or '').strip()
+            return {
+                'success': False,
+                'errorMessage': detail if detail else NO_CALLBACK_REPORT_MESSAGE,
+            }
+        if self.kube_status == 'Success':
+            return {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
+        return {}
