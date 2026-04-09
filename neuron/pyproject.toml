@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cerebro-neuron"
+version = "0.1.0"
+description = "Cerebro Kubernetes neuron"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/neuron"]
