@@ -53,6 +53,25 @@ def inject_callback_env(manifest: dict) -> None:
 THEHIVE_WORKER_ENV_NAMES = ('TH_URL', 'TH_KEY', 'TH_USER', 'TH_PASSWORD')
 
 
+def inject_cerebro_invocation_env(manifest: dict, artefact: Any) -> None:
+    """
+    Pass analyzer/responder invocation fields to the worker container via environment variables.
+
+    Keeps container ``args`` free for image-specific or manifest-defined flags.
+    """
+    updates = {
+        'CEREBRO_OBJECT_TYPE': artefact.type,
+        'CEREBRO_OBJECT_VALUE': artefact.data,
+        'CEREBRO_OBJECT_ID': artefact.id,
+        'CEREBRO_CONTEXT_TYPE': artefact.ctx_type or '',
+        'CEREBRO_CONTEXT_ID': artefact.ctx_id or '',
+    }
+    container = manifest['spec']['template']['spec']['containers'][0]
+    env = container.setdefault('env', [])
+    env[:] = [e for e in env if not (isinstance(e, dict) and e.get('name') in updates)]
+    env.extend({'name': k, 'value': v} for k, v in updates.items())
+
+
 def inject_thehive_env(manifest: dict) -> None:
     """
     Apply TheHive settings from the Cerebro process environment to the worker container.
@@ -204,37 +223,11 @@ class K8sJob(BaseModel):
             if 'CEREBRO_INVOCATION_TYPE' not in existing:
                 env.append({'name': 'CEREBRO_INVOCATION_TYPE', 'value': worker.type})
 
-            # collect args for the job entrypoint (analyzers: observable value only; responders: entity + optional context)
-            if worker.type == 'analyzer':
-                args = [
-                    '--invocation-type',
-                    'analyzer',
-                    '--object-type',
-                    artefact.type,
-                    '--object-value',
-                    artefact.data,
-                ]
-            else:
-                args = [
-                    '--invocation-type',
-                    'responder',
-                    '--object-type',
-                    artefact.type,
-                    '--object-id',
-                    artefact.id,
-                ]
-                if artefact.ctx_type and artefact.ctx_id:
-                    args.extend(
-                        ['--context-type', artefact.ctx_type, '--context-id', artefact.ctx_id]
-                    )
+            inject_cerebro_invocation_env(manifest, artefact)
 
-            # pass the args to the job entrypoint
-            try:
-                manifest['spec']['template']['spec']['containers'][0]['args'].extend(args)
-            except KeyError:
-                manifest['spec']['template']['spec']['containers'][0]['args'] = args
-
-            logger.info(f'Launching a job instance of {worker.name} with {" ".join(args)}')
+            logger.info(
+                f'Launching job {worker.name} worker.type={worker.type} object_type={artefact.type}'
+            )
 
         except KeyError as e:
             logger.error(f'{e} not define in manifest')
@@ -305,7 +298,7 @@ class K8sJob(BaseModel):
 
 class ThehiveArtefact(BaseModel):
     """
-    Normalized target for a Cerebro job (Kubernetes worker args).
+    Normalized target for a Cerebro job (Kubernetes worker environment variables).
 
     Observable targets always use the ``observable:`` prefix (e.g. ``observable:hostname``) so they
     are distinct from ``case`` and ``alert``. **Analyzer** runs use :meth:`from_analyzer_event`
@@ -314,7 +307,8 @@ class ThehiveArtefact(BaseModel):
 
     For analyzers, ``data`` is always the raw observable value from the request (the ``data``
     field). ``id`` is only set from TheHive ``id`` or ``artifactId`` when present; it is never
-    copied from ``data``.
+    copied from ``data``. Analyzer runs do not populate ``ctx_type`` / ``ctx_id`` (the ``message``
+    field is not a reliable case or alert reference).
     """
     type: str
     id: str
@@ -389,10 +383,9 @@ class ThehiveArtefact(BaseModel):
             else:
                 raise ValueError('Payload malformed: analyzer run needs string data or attachment id')
 
-            msg = event.get('message')
-            if msg is not None and str(msg) != '':
-                artefact['ctx_type'] = 'case'
-                artefact['ctx_id'] = str(msg)
+            # Do not map ``message`` to context: TheHive may send free-form strings there (e.g.
+            # alert fingerprints) that are not a case/alert id. Analyzers have no responder-style
+            # context; ``ctx_type`` / ``ctx_id`` stay unset.
 
             return cls.model_validate(artefact)
 

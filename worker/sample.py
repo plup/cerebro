@@ -1,6 +1,8 @@
 import logging
 import sys
 
+from requests import RequestException
+
 from neuron import CerebroNeuron
 
 if __name__ == '__main__':
@@ -13,13 +15,13 @@ if __name__ == '__main__':
 
     try:
         neuron = CerebroNeuron()
-        logging.info(neuron.args)
+        logging.info(neuron.invocation)
 
-        if neuron.args.invocation_type == 'responder':
+        if neuron.invocation.role == 'responder':
             # Responders run on any types of entities and get access to a context so we 
             # can track back an observable in an alert or case
-            obj_type = neuron.args.object_type
-            obj_id = neuron.args.object_id
+            obj_type = neuron.invocation.object_type
+            obj_id = neuron.invocation.object_id
 
             report = {
                 'full': {
@@ -32,11 +34,11 @@ if __name__ == '__main__':
                 ],
             }
 
-        if neuron.args.invocation_type == 'analyzer':
+        if neuron.invocation.role == 'analyzer':
             # Analyzers run on observable and can only access the obervable type and value
             # no context whatsoever
-            obs_type = neuron.args.object_type
-            obs_value = neuron.args.object_value
+            obs_type = neuron.invocation.object_type
+            obs_value = neuron.invocation.object_value
 
             report = {
                 'summary': {
@@ -77,7 +79,7 @@ if __name__ == '__main__':
             neuron.send_report(report)
 
         except RequestException as exc:
-            logger.warning(f'Callback to Cerebro failed: {exc}')
+            logging.warning('Callback to Cerebro failed: %s', exc)
 
     except Exception as e:
         logging.exception(f'Unhandled exception: {e}')

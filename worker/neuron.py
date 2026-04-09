@@ -1,17 +1,64 @@
-"""Cerebro worker: CLI, Cortex-shaped reports, and callback to the orchestrator."""
+"""Cerebro worker: invocation env, Cortex-shaped reports, and callback to the orchestrator."""
 from __future__ import annotations
 
-import argparse
 import logging
-import sys
-from argparse import Namespace
+from dataclasses import dataclass
 from os import environ
 
 import requests
-from requests import RequestException
 from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class InvocationParams:
+    """Invocation target for a worker run (from Cerebro-injected ``CEREBRO_*`` environment variables)."""
+
+    role: str
+    object_type: str
+    object_value: str | None
+    object_id: str | None
+    context_type: str | None
+    context_id: str | None
+
+    @classmethod
+    def from_environ(cls) -> InvocationParams:
+        """Read and validate invocation fields from the process environment."""
+        try:
+            role = environ['CEREBRO_INVOCATION_TYPE']
+        except KeyError as e:
+            raise ValueError('CEREBRO_INVOCATION_TYPE is required') from e
+        if role not in ('analyzer', 'responder'):
+            raise ValueError('CEREBRO_INVOCATION_TYPE must be analyzer or responder')
+
+        object_type = environ.get('CEREBRO_OBJECT_TYPE') or None
+        object_value = environ.get('CEREBRO_OBJECT_VALUE') or None
+        object_id = environ.get('CEREBRO_OBJECT_ID') or None
+        raw_ctx_t = environ.get('CEREBRO_CONTEXT_TYPE', '')
+        raw_ctx_i = environ.get('CEREBRO_CONTEXT_ID', '')
+        context_type = raw_ctx_t if raw_ctx_t in ('alert', 'case') else None
+        context_id = raw_ctx_i or None
+
+        if role == 'analyzer':
+            if object_type is None or object_value is None:
+                raise ValueError(
+                    'analyzer runs require CEREBRO_OBJECT_TYPE and CEREBRO_OBJECT_VALUE'
+                )
+        else:
+            if object_type is None or object_id is None:
+                raise ValueError(
+                    'responder runs require CEREBRO_OBJECT_TYPE and CEREBRO_OBJECT_ID'
+                )
+
+        return cls(
+            role=role,
+            object_type=object_type,
+            object_value=object_value,
+            object_id=object_id,
+            context_type=context_type,
+            context_id=context_id,
+        )
 
 
 def short_observable_type(object_type: str) -> str:
@@ -51,13 +98,12 @@ class ThehiveClient(requests.Session):
 
 class CerebroNeuron:
     """
-    Parses worker CLI args, initializes a TheHive client, builds the Cortex ``report`` JSON,
-    and POSTs it to Cerebro.
+    Loads invocation from environment variables, initializes a TheHive client, builds the Cortex
+    ``report`` JSON, and POSTs it to Cerebro.
     """
 
-    def __init__(self, argv: list[str] | None = None):
-        self.argv = argv if argv is not None else sys.argv[1:]
-        self.args = self.parse_args(self.argv)
+    def __init__(self):
+        self.invocation = InvocationParams.from_environ()
         self.thehive = self.build_thehive_client()
 
     def build_thehive_client(self) -> ThehiveClient | None:
@@ -69,37 +115,6 @@ class CerebroNeuron:
         except KeyError:
             logger.warning('TheHive client not initialized: TH_URL is not set')
             return None
-
-    def parse_args(self, argv: list[str]) -> Namespace:
-        parser = argparse.ArgumentParser(description='Run the job')
-        parser.add_argument(
-            '--invocation-type',
-            required=True,
-            choices=['analyzer', 'responder'],
-            help='Cortex role for this run (analyzer vs responder), from the worker definition.',
-        )
-        parser.add_argument(
-            '--object-type',
-            help=(
-                'Observable targets use the observable: prefix (e.g. observable:hostname). '
-                'Responders may also use alert or case.'
-            ),
-        )
-        parser.add_argument(
-            '--object-value',
-            dest='object_value',
-            help='Observable value for analyzer runs (the analyzed string).',
-        )
-        parser.add_argument('--object-id', help='Target entity id for responder runs.')
-        parser.add_argument('--context-type', default=None, choices=['alert', 'case'])
-        parser.add_argument('--context-id', default=None)
-        ns = parser.parse_args(argv)
-        if ns.invocation_type == 'analyzer':
-            if ns.object_type is None or ns.object_value is None:
-                parser.error('analyzer runs require --object-type and --object-value')
-        elif ns.object_type is None or ns.object_id is None:
-            parser.error('responder runs require --object-type and --object-id')
-        return ns
 
     def send_report(self, report: dict) -> None:
         """
@@ -128,14 +143,15 @@ class CerebroNeuron:
         logger.info(f'Cerebro callback accepted (HTTP {r.status_code})')
 
     def run(self) -> None:
-        if self.args.invocation_type == 'analyzer':
+        inv = self.invocation
+        if inv.role == 'analyzer':
             logger.info(
-                f'Worker starting invocation_type={self.args.invocation_type!r} '
-                f'object_type={self.args.object_type!r} object_value={self.args.object_value!r}'
+                f'Worker starting role={inv.role!r} '
+                f'object_type={inv.object_type!r} object_value={inv.object_value!r}'
             )
         else:
             logger.info(
-                f'Worker starting invocation_type={self.args.invocation_type!r} '
-                f'object_type={self.args.object_type!r} object_id={self.args.object_id!r} '
-                f'context_type={self.args.context_type!r} context_id={self.args.context_id!r}'
+                f'Worker starting role={inv.role!r} '
+                f'object_type={inv.object_type!r} object_id={inv.object_id!r} '
+                f'context_type={inv.context_type!r} context_id={inv.context_id!r}'
             )
