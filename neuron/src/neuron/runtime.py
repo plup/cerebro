@@ -88,7 +88,8 @@ class CerebroNeuron:
         """
         POST a Cortex-shaped report to Cerebro (no-op unless callback env vars are injected).
 
-        Requires ``CEREBRO_CALLBACK_URL``, ``CEREBRO_CALLBACK_TOKEN``, and ``CEREBRO_JOB_ID``.
+        Requires ``CEREBRO_CALLBACK_URL``, ``CEREBRO_CALLBACK_TOKEN`` (same value as Cerebro's
+        ``CEREBRO_API_KEY``), and ``CEREBRO_JOB_ID``.
         """
         base = environ.get('CEREBRO_CALLBACK_URL')
         token = environ.get('CEREBRO_CALLBACK_TOKEN')
