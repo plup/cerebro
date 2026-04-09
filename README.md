@@ -1,11 +1,18 @@
 # Cerebro
 
+Blueteam automation orchestrator: Cortex-compatible API for TheHive and Kubernetes job execution.
+
+## Repository layout
+
+- **Root `pyproject.toml`** — installable package **`cerebro`** from **`src/cerebro/`** (API server, models, routers). It does **not** include the job container code.
+- **`neuron/`** — **nested subproject** in the same shape as Cerebro: its own **`pyproject.toml`**, **`src/`** tree, **`uv.lock`**, and **Hatchling** wheel (`cerebro-neuron`). It exists to build the **Kubernetes neuron/job image** (`neuron/Dockerfile`). Treat it like a sibling mini-repo: run **`uv sync`**, **`uv build`**, or **`uv run`** from **`neuron/`** when working on that image or on `neuron.test`.
+
 ## Run in kubernetes
 
 Build the images:
 ```
 $ docker buildx build . -t cerebro -f k8s/cerebro.dock
-$ docker buildx build . -t job -f k8s/job.dock
+$ docker build -f neuron/Dockerfile neuron -t worker
 ```
 
 Deploy Cerebro and TheHive:
@@ -22,28 +29,36 @@ thehive   NodePort   10.43.112.109   <none>        9000:30001/TCP
 $ export THEHIVE=http://localhost:30001
 ```
 
-## Mount local files
+## Live tests (TheHive)
 
-Add a `hostPath` to mount the code and run cerebro from the code itself:
-```
-      volumes:
-        - name: host-volume
-          hostPath:
-            path: /path/on/host
-      containers:
-        - name: cerebro
-          volumeMounts:
-            - name: host-volume
-              mountPath: /app
-           env:
-             - name: PYTHONPATH
-               value: /app/src
+Tests under **`tests/live/`** call a **real TheHive** over HTTP. They are **off by default** unless **`RUN_LIVE_TESTS`** is set (see table).
+
+Put the variables you need in a **`.env`** file at the repo root (do not commit it; it may hold secrets), then run:
+
+```bash
+uv run --env-file=.env pytest tests/live -m live -v
 ```
 
-Then reload the pods after a code change:
+Example **`.env`** (use either API key **or** basic auth):
+
+```bash
+RUN_LIVE_TESTS=1
+THEHIVE_LIVE_URL=http://127.0.0.1:9000
+THEHIVE_API_KEY=your-key-here
+# or: TH_URL=...  TH_KEY=...
+# or: TH_USER=user@thehive.local  TH_PASSWORD=secret
+# HTTPS with a self-signed cert (e.g. port-forward to TLS in the cluster):
+# TH_VERIFY_SSL=0
 ```
-kubectl rollout restart deploy/cerebro
-```
+
+| Variable | Purpose |
+|----------|---------|
+| `RUN_LIVE_TESTS` | `1` / `true` / `yes` — required or live tests are skipped |
+| `THEHIVE_LIVE_URL` | Base URL (preferred) |
+| `TH_URL` | Used if `THEHIVE_LIVE_URL` is unset |
+| `THEHIVE_API_KEY` or `TH_KEY` | Bearer token |
+| `TH_USER` + `TH_PASSWORD` | Basic auth if no API key |
+| `TH_VERIFY_SSL` | Set to `0` / `false` / `no` / `off` if HTTPS uses a self-signed cert (local dev). Default is to verify. |
 
 ## Create alerts
 
