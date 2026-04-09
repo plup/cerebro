@@ -48,7 +48,7 @@ THEHIVE_API_KEY=your-key-here
 # or: TH_URL=...  TH_KEY=...
 # or: TH_USER=user@thehive.local  TH_PASSWORD=secret
 # HTTPS with a self-signed cert (e.g. port-forward to TLS in the cluster):
-# TH_VERIFY_SSL=0
+# TH_VERIFY=0
 ```
 
 | Variable | Purpose |
@@ -58,7 +58,7 @@ THEHIVE_API_KEY=your-key-here
 | `TH_URL` | Used if `THEHIVE_LIVE_URL` is unset |
 | `THEHIVE_API_KEY` or `TH_KEY` | Bearer token |
 | `TH_USER` + `TH_PASSWORD` | Basic auth if no API key |
-| `TH_VERIFY_SSL` | Set to `0` / `false` / `no` / `off` if HTTPS uses a self-signed cert (local dev). Default is to verify. |
+| `TH_VERIFY` | Read by neuron and live tests: `0` disables TLS verification; default `1`. The client accepts ``verify: bool = True``. |
 
 ## Create alerts
 

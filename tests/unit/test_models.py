@@ -136,22 +136,10 @@ class TestCortexJobReport():
             message='',
             callback_report=None,
         )
-        assert bad.report == {'success': False, 'errorMessage': NO_CALLBACK_REPORT_MESSAGE}
-
-    def test_report_kube_failure_message_without_callback(self):
-        w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
-        job_name = 'j5'
-        hint = f'Job failed; check the Kubernetes job {job_name}.'
-        job = CortexJob(
-            id=job_name,
-            worker=w,
-            object_type='observable:hostname',
-            kube_status='Failure',
-            started=datetime.now(),
-            message=hint,
-            callback_report=None,
-        )
-        assert job.report == {'success': False, 'errorMessage': hint}
+        assert bad.report == {
+            'success': False,
+            'errorMessage': f'Job failed; check the Kubernetes job j4.',
+        }
 
     def test_report_ignores_callback_while_in_progress(self):
         w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})

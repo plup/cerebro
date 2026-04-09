@@ -21,5 +21,13 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-mock",
-    "httpx"
+    "httpx",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cerebro"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: TheHive HTTP (set RUN_LIVE_TESTS=1; see README.md)",
 ]

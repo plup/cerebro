@@ -274,19 +274,12 @@ class K8sJob(BaseModel):
         if k8s_job.status.active:
             # nothing to return if the job is still executing
             kube_status = 'InProgress'
-            message = ''
-
         else:
             # map result conditions
             if k8s_job.status.failed and k8s_job.status.failed > 0:
                 kube_status = 'Failure'
             else:
                 kube_status = 'Success'
-
-            if kube_status == 'Failure':
-                message = f'Job failed; check the Kubernetes job {job_id}.'
-            else:
-                message = ''
 
         return cls(
             id = job_id,
@@ -295,7 +288,6 @@ class K8sJob(BaseModel):
             kube_status = kube_status,
             started = k8s_job.metadata.creation_timestamp,
             ended = k8s_job.status.completion_time,
-            message = message,
             callback_report = get_stored_report(job_id),
         )
 

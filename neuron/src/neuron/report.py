@@ -10,16 +10,15 @@ class Report:
     ``operations``, ``artifacts``).
 
     ``success`` defaults to ``True``; call :meth:`fail` with an error message to record a failed run
-    (sets ``success`` to ``False`` and replaces ``full`` with that message).
+    (replaces the whole report with only ``success`` and ``errorMessage``).
     """
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {'success': True}
 
     def fail(self, message: str) -> Self:
-        """Mark the run as failed and set ``full.message`` (Cortex-style failure text)."""
-        self._data['success'] = False
-        self._data['full'] = {'message': message}
+        """Replace the report with a failed run: only ``success`` and ``errorMessage``."""
+        self._data = {'success': False, 'errorMessage': message}
         return self
 
     def set_details(self, details: dict[str, Any]) -> Self:
