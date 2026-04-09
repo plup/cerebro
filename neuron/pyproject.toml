@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Cerebro Kubernetes neuron"
 requires-python = ">=3.11"
 dependencies = [
-    "requests",
+    "httpx",
 ]
 
 [tool.hatch.build.targets.wheel]

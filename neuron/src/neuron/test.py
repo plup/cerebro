@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import sys
 
-from requests import RequestException
+import httpx
 
 from neuron.runtime import CerebroNeuron
 
@@ -37,7 +37,7 @@ def main() -> None:
                     logging.warning(
                         'Skipping TheHive fetch: client not initialized (set TH_URL)'
                     )
-                except RequestException as exc:
+                except httpx.HTTPError as exc:
                     logging.warning(f'TheHive get_observable failed: {exc}')
                 else:
                     observable_value = obs_doc.get('data')
@@ -106,7 +106,7 @@ def main() -> None:
         try:
             neuron.send_report(report)
 
-        except RequestException as exc:
+        except httpx.HTTPError as exc:
             logging.warning(f'Callback to Cerebro failed: {exc}')
 
     except Exception as e:
