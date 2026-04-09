@@ -217,4 +217,7 @@ spec:
             - name: TH_USER
               value: user@thehive.local
             - name: TH_PASSWORD
-              value: secret
+              valueFrom:
+                secretKeyRef:
+                  name: thehive-default-pw
+                  key: default-password
