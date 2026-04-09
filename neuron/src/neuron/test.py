@@ -1,12 +1,15 @@
+"""Demo entrypoint: load env, build a sample Cortex report, optional callback to Cerebro."""
+from __future__ import annotations
+
 import logging
 import sys
 
 from requests import RequestException
 
-from neuron import CerebroNeuron
+from neuron.runtime import CerebroNeuron
 
-if __name__ == '__main__':
 
+def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(levelname)s %(message)s',
@@ -42,6 +45,7 @@ if __name__ == '__main__':
                         logging.info(f'Observable value from TheHive: {observable_value!r}')
 
             report = {
+                'success': True,
                 'full': {
                     # in responder context the report needs to be short
                     'message': (
@@ -56,12 +60,13 @@ if __name__ == '__main__':
                 ],
             }
 
-        if neuron.invocation.role == 'analyzer':
+        elif neuron.invocation.role == 'analyzer':
             # Analyzers run on a single observable (type + value only).
             obs_type = neuron.invocation.object_type
             obs_value = neuron.invocation.object_value
 
             report = {
+                'success': True,
                 'summary': {
                     'taxonomies': [
                         {
@@ -95,6 +100,8 @@ if __name__ == '__main__':
                     },
                 ],
             }
+        else:
+            raise ValueError(f'unsupported CEREBRO_INVOCATION_TYPE {neuron.invocation.role!r}')
 
         try:
             neuron.send_report(report)
@@ -105,3 +112,7 @@ if __name__ == '__main__':
     except Exception as e:
         logging.exception(f'Unhandled exception: {e}')
         raise SystemExit(1) from e
+
+
+if __name__ == '__main__':
+    main()

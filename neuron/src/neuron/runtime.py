@@ -1,4 +1,4 @@
-"""Cerebro worker: invocation env, Cortex-shaped reports, and callback to the orchestrator."""
+"""Cerebro neuron: invocation env, Cortex-shaped reports, and callback to the orchestrator."""
 from __future__ import annotations
 
 import logging
@@ -7,14 +7,15 @@ from os import environ
 from typing import Any
 
 import requests
-from urllib.parse import urljoin
+
+from neuron.thehive import ThehiveClient
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class InvocationParams:
-    """Invocation target for a worker run (from Cerebro-injected ``CEREBRO_*`` environment variables)."""
+    """Invocation target for a neuron run (from Cerebro-injected ``CEREBRO_*`` environment variables)."""
 
     role: str
     object_type: str
@@ -60,42 +61,6 @@ class InvocationParams:
             context_type=context_type,
             context_id=context_id,
         )
-
-
-class ThehiveClient(requests.Session):
-    """HTTP session for TheHive (``TH_URL``, ``TH_KEY`` or ``TH_USER`` / ``TH_PASSWORD``)."""
-
-    def __init__(
-        self,
-        base_url: str | None = None,
-        key: str | None = None,
-        user: str | None = None,
-        password: str | None = None,
-    ):
-        super().__init__()
-        self.base_url = base_url if base_url is not None else environ['TH_URL']
-        if key is None:
-            key = environ.get('TH_KEY')
-        if user is None:
-            user = environ.get('TH_USER')
-        if password is None:
-            password = environ.get('TH_PASSWORD')
-        if key:
-            self.headers = {'Authorization': f'Bearer {key}'}
-        else:
-            self.auth = (user, password)
-
-    def request(self, method, url, *args, **kwargs):
-        joined_url = urljoin(self.base_url, url)
-        return super().request(method, joined_url, *args, **kwargs)
-
-    def get_observable(self, observable_id: str) -> dict[str, Any]:
-        """
-        Fetch a single observable by id (TheHive 5+ ``GET /api/v1/observable/{id}``).
-        """
-        r = self.get(f'/api/v1/observable/{observable_id}')
-        r.raise_for_status()
-        return r.json()
 
 
 class CerebroNeuron:
@@ -148,12 +113,12 @@ class CerebroNeuron:
         inv = self.invocation
         if inv.role == 'analyzer':
             logger.info(
-                f'Worker starting role={inv.role!r} '
+                f'Neuron starting role={inv.role!r} '
                 f'object_type={inv.object_type!r} object_value={inv.object_value!r}'
             )
         else:
             logger.info(
-                f'Worker starting role={inv.role!r} '
+                f'Neuron starting role={inv.role!r} '
                 f'object_type={inv.object_type!r} object_id={inv.object_id!r} '
                 f'context_type={inv.context_type!r} context_id={inv.context_id!r}'
             )
