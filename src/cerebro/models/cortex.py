@@ -151,7 +151,8 @@ class CortexJob(K8sJob):
         When the worker posted JSON to ``POST /api/job/{id}/callback``, that payload is returned
         once the job has finished (``Success`` or ``Failure``). If the payload omits ``success``,
         it is set from the Kubernetes job outcome (``True`` for ``Success``, ``False`` for
-        ``Failure``). With no callback, a minimal placeholder is used.
+        ``Failure``). With no callback, success uses a minimal placeholder; failure points at the
+        Kubernetes job id.
         """
         if self.kube_status in ('Waiting', 'InProgress'):
             return {}
@@ -163,10 +164,9 @@ class CortexJob(K8sJob):
             return out
 
         if self.kube_status == 'Failure':
-            detail = (self.message or '').strip()
             return {
                 'success': False,
-                'errorMessage': detail if detail else NO_CALLBACK_REPORT_MESSAGE,
+                'errorMessage': f'Job failed; check the Kubernetes job {self.id}.',
             }
         if self.kube_status == 'Success':
             return {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
