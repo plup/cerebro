@@ -56,7 +56,7 @@ def test_thehive_rejects_wrong_bearer(monkeypatch):
 
 
 def test_job_callback_stores_report(monkeypatch):
-    monkeypatch.setenv('CEREBRO_CALLBACK_SECRET', 'test-secret')
+    monkeypatch.setenv('CEREBRO_API_KEY', 'test-secret')
     r = client.post(
         '/api/job/my-job-id/callback',
         json={'success': True, 'full': {'message': 'ok'}},
@@ -69,7 +69,7 @@ def test_job_callback_stores_report(monkeypatch):
 
 
 def test_job_callback_rejects_bad_token(monkeypatch):
-    monkeypatch.setenv('CEREBRO_CALLBACK_SECRET', 'test-secret')
+    monkeypatch.setenv('CEREBRO_API_KEY', 'test-secret')
     r = client.post(
         '/api/job/my-job-id/callback',
         json={'success': True},

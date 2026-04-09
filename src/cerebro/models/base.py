@@ -22,22 +22,22 @@ logger = logging.getLogger(__name__)
 
 
 def inject_callback_env(manifest: dict) -> None:
-    """Add env vars so the worker can POST a Cortex report back (optional, requires secret and URL)."""
+    """Add env vars so the worker can POST a Cortex report back (optional; needs URL and API key)."""
     try:
-        secret = environ['CEREBRO_CALLBACK_SECRET']
+        api_key = environ['CEREBRO_API_KEY']
     except KeyError:
         return
     try:
         base = environ['CEREBRO_CALLBACK_URL'].rstrip('/')
     except KeyError:
         logger.warning(
-            'CEREBRO_CALLBACK_SECRET is set but CEREBRO_CALLBACK_URL is missing; skipping callback env injection'
+            'CEREBRO_API_KEY is set but CEREBRO_CALLBACK_URL is missing; skipping callback env injection'
         )
         return
     container = manifest['spec']['template']['spec']['containers'][0]
     extra = [
         {'name': 'CEREBRO_CALLBACK_URL', 'value': base},
-        {'name': 'CEREBRO_CALLBACK_TOKEN', 'value': secret},
+        {'name': 'CEREBRO_CALLBACK_TOKEN', 'value': api_key},
         {
             'name': 'CEREBRO_JOB_ID',
             'valueFrom': {'fieldRef': {'fieldPath': "metadata.labels['job-name']"}},

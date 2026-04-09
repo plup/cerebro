@@ -245,8 +245,6 @@ spec:
               value: /etc/workers.yml
             - name: CEREBRO_CALLBACK_URL
               value: http://cerebro:8000
-            - name: CEREBRO_CALLBACK_SECRET
-              value: thesecrettoken
             - name: CEREBRO_API_KEY
               value: cortex-api-key-change-me
             - name: TH_URL
