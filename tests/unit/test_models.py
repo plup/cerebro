@@ -1,7 +1,23 @@
 import pytest
+import yaml
 from datetime import datetime
 from cerebro.models.base import Worker, K8sJob, ThehiveArtefact, WorkerConfigurationError, JobExecutionError
 from cerebro.models.cortex import Analyzer, Responder, CortexJob, NO_CALLBACK_REPORT_MESSAGE
+
+_MINIMAL_MANIFEST = {
+    'apiVersion': 'batch/v1',
+    'kind': 'Job',
+    'metadata': {'generateName': 'cerebro-job-'},
+    'spec': {
+        'template': {
+            'spec': {
+                'restartPolicy': 'Never',
+                'containers': [{'name': 'job', 'image': 'x'}],
+            }
+        }
+    },
+}
+
 
 class TestWorker():
     """Test the worker configuration."""
@@ -13,6 +29,42 @@ class TestWorker():
     def test_responder(self, default_workers):
         assert len(Responder.listall()) == 1
         assert 'thehive:case_artifact' in Responder.get('foo').dataTypeList
+
+    def test_load_from_directory_merges_yaml_files(self, monkeypatch, tmp_path):
+        """``WORKER_CONFIG`` as a directory loads every *.yml / *.yaml in sorted order."""
+        w1 = {'name': 'w1', 'type': 'analyzer', 'triggers': ['observable:ip'], 'manifest': _MINIMAL_MANIFEST}
+        w2 = {'name': 'w2', 'type': 'analyzer', 'triggers': ['observable:ip'], 'manifest': _MINIMAL_MANIFEST}
+        (tmp_path / '01-first.yml').write_text(yaml.safe_dump(w1, sort_keys=False))
+        (tmp_path / '02-second.yml').write_text(yaml.safe_dump(w2, sort_keys=False))
+        monkeypatch.setenv('WORKER_CONFIG', str(tmp_path))
+        workers = Worker.list_workers()
+        assert [w.name for w in workers] == ['w1', 'w2']
+
+    def test_load_single_file_root_mapping(self, monkeypatch, tmp_path):
+        """One worker config file is a single YAML mapping."""
+        solo = {
+            'name': 'solo',
+            'type': 'analyzer',
+            'triggers': ['observable:ip'],
+            'manifest': _MINIMAL_MANIFEST,
+        }
+        cfg = tmp_path / 'workers.yml'
+        cfg.write_text(yaml.safe_dump(solo, sort_keys=False))
+        monkeypatch.setenv('WORKER_CONFIG', str(cfg))
+        assert len(Worker.list_workers()) == 1
+        assert Worker.get('solo').name == 'solo'
+
+    def test_load_rejects_list_root_file(self, monkeypatch, tmp_path):
+        """A YAML sequence at file root produces no workers (only mapping roots are loaded)."""
+        cfg = tmp_path / 'workers.yml'
+        cfg.write_text(
+            '- name: a\n'
+            '  type: analyzer\n'
+            '  triggers: []\n'
+            '  manifest: {}\n'
+        )
+        monkeypatch.setenv('WORKER_CONFIG', str(cfg))
+        assert Worker.list_workers() == []
 
 
 class TestThehiveArtefact():

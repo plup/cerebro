@@ -2,108 +2,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cerebro
+  name: cerebro-lab
 data:
   # Skaffold artifact name `worker` — replaced by resourceSelector with the built tag/digest.
   worker_image: worker
-  workers.yml: |
-    - name: foo
-      type: responder
-      description: Test responder designed to run on observables
-      triggers:
-        - observable:filename
-        - observable:hostname
-      manifest:
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          generateName: cerebro-job-
-          labels:
-            cerebro/worker: "true"
-        spec:
-          backoffLimit: 0
-          template:
-            spec:
-              restartPolicy: Never
-              securityContext:
-                runAsNonRoot: True
-                runAsUser: 65534
-              containers:
-                - name: job
-                  image: worker
-                  securityContext:
-                    privileged: false
-                    allowPrivilegeEscalation: false
-                    capabilities:
-                      drop:
-                        - ALL
-                    seccompProfile:
-                      type: RuntimeDefault
-    - name: fail
-      type: responder
-      description: Test responder designed to fail in kube
-      triggers:
-        - observable:filename
-        - observable:hostname
-      manifest:
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          generateName: cerebro-job-
-          labels:
-            cerebro/worker: "true"
-        spec:
-          backoffLimit: 0
-          template:
-            spec:
-              restartPolicy: Never
-              securityContext:
-                runAsNonRoot: True
-                runAsUser: 65534
-              containers:
-                - name: job
-                  image: worker
-                  command: ["false"]
-                  securityContext:
-                    privileged: false
-                    allowPrivilegeEscalation: false
-                    capabilities:
-                      drop:
-                        - ALL
-                    seccompProfile:
-                      type: RuntimeDefault
-    - name: bar
-      type: analyzer
-      description: Test analyzer designed to support all operations
-      triggers:
-        - observable:filename
-        - observable:hostname
-      manifest:
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          generateName: cerebro-job-
-          labels:
-            cerebro/worker: "true"
-        spec:
-          backoffLimit: 0
-          template:
-            spec:
-              restartPolicy: Never
-              securityContext:
-                runAsNonRoot: True
-                runAsUser: 65534
-              containers:
-                - name: job
-                  image: worker
-                  securityContext:
-                    privileged: false
-                    allowPrivilegeEscalation: false
-                    capabilities:
-                      drop:
-                        - ALL
-                    seccompProfile:
-                      type: RuntimeDefault
   log.yml: |
     version: 1
     disable_existing_loggers: false
@@ -133,10 +35,129 @@ data:
         handlers: [console]
         propagate: no
 ---
+# One ConfigMap per worker; mounted together into /etc/cerebro/workers (see cerebro-lab Deployment).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cerebro-lab-worker-foo
+data:
+  worker.yml: |
+    name: foo
+    type: responder
+    description: Test responder designed to run on observables
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-lab-job-
+        labels:
+          cerebro-lab/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: True
+              runAsUser: 65534
+            containers:
+              - name: job
+                image: worker
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cerebro-lab-worker-fail
+data:
+  worker.yml: |
+    name: fail
+    type: responder
+    description: Test responder designed to fail in kube
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-lab-job-
+        labels:
+          cerebro-lab/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: True
+              runAsUser: 65534
+            containers:
+              - name: job
+                image: worker
+                command: ["false"]
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cerebro-lab-worker-bar
+data:
+  worker.yml: |
+    name: bar
+    type: analyzer
+    description: Test analyzer designed to support all operations
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-lab-job-
+        labels:
+          cerebro-lab/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: True
+              runAsUser: 65534
+            containers:
+              - name: job
+                image: worker
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: job-runner
+  name: cerebro-lab-job-runner
 rules:
   - apiGroups: ["batch"]
     resources: ["jobs"]
@@ -148,51 +169,51 @@ rules:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: cerebro
+  name: cerebro-lab
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: cerebro
+  name: cerebro-lab
 subjects:
   - kind: ServiceAccount
-    name: cerebro
+    name: cerebro-lab
 roleRef:
   kind: Role
-  name: job-runner
+  name: cerebro-lab-job-runner
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: cerebro
+  name: cerebro-lab
   labels:
-    app: cerebro
+    app: cerebro-lab
 spec:
   ports:
     - port: 8000
   selector:
-    app: cerebro
+    app: cerebro-lab
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: cerebro
+  name: cerebro-lab
   labels:
-    app: cerebro
+    app: cerebro-lab
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: cerebro
+      app: cerebro-lab
   strategy:
     type: Recreate
   template:
     metadata:
       labels:
-        app: cerebro
+        app: cerebro-lab
     spec:
-      serviceAccountName: cerebro
+      serviceAccountName: cerebro-lab
       imagePullSecrets:
         - name: kakarot-pull-creds-global
       securityContext:
@@ -202,9 +223,27 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: cerebro
+            name: cerebro-lab
+        - name: workers
+          projected:
+            sources:
+              - configMap:
+                  name: cerebro-lab-worker-foo
+                  items:
+                    - key: worker.yml
+                      path: foo.yml
+              - configMap:
+                  name: cerebro-lab-worker-fail
+                  items:
+                    - key: worker.yml
+                      path: fail.yml
+              - configMap:
+                  name: cerebro-lab-worker-bar
+                  items:
+                    - key: worker.yml
+                      path: bar.yml
       containers:
-        - name: cerebro
+        - name: cerebro-lab
           image: server
           imagePullPolicy: IfNotPresent
           command: ["uvicorn", "cerebro.api:app", "--host", "0.0.0.0", "--log-config", "/etc/log.yml"]
@@ -227,9 +266,8 @@ spec:
               cpu: 500m
               memory: 512Mi
           volumeMounts:
-            - name: config
-              mountPath: /etc/workers.yml
-              subPath: workers.yml
+            - name: workers
+              mountPath: /etc/cerebro/workers
               readOnly: true
             - name: config
               mountPath: /etc/log.yml
@@ -239,12 +277,12 @@ spec:
             - name: OVERRIDE_WORKER_IMAGE
               valueFrom:
                 configMapKeyRef:
-                  name: cerebro
+                  name: cerebro-lab
                   key: worker_image
             - name: WORKER_CONFIG
-              value: /etc/workers.yml
+              value: /etc/cerebro/workers
             - name: CEREBRO_CALLBACK_URL
-              value: http://cerebro:8000
+              value: http://cerebro-lab:8000
             - name: CEREBRO_API_KEY
               value: cortex-api-key-change-me
             - name: TH_URL

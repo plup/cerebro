@@ -76,7 +76,7 @@ def default_workers(mocker):
             }
         },
     ]
-    mocker.patch('cerebro.models.base.Worker._load', return_value=workers)
+    mocker.patch('cerebro.models.base.read_worker_config', return_value=workers)
 
 @pytest.fixture()
 def create_worker():
