@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from os import environ
+from typing import Any
 
 import requests
 from urllib.parse import urljoin
@@ -61,13 +62,6 @@ class InvocationParams:
         )
 
 
-def short_observable_type(object_type: str) -> str:
-    """Cortex datatype without ``observable:`` (e.g. ``observable:ip`` → ``ip``)."""
-    if object_type.startswith('observable:'):
-        return object_type.removeprefix('observable:')
-    return object_type
-
-
 class ThehiveClient(requests.Session):
     """HTTP session for TheHive (``TH_URL``, ``TH_KEY`` or ``TH_USER`` / ``TH_PASSWORD``)."""
 
@@ -94,6 +88,14 @@ class ThehiveClient(requests.Session):
     def request(self, method, url, *args, **kwargs):
         joined_url = urljoin(self.base_url, url)
         return super().request(method, joined_url, *args, **kwargs)
+
+    def get_observable(self, observable_id: str) -> dict[str, Any]:
+        """
+        Fetch a single observable by id (TheHive 5+ ``GET /api/v1/observable/{id}``).
+        """
+        r = self.get(f'/api/v1/observable/{observable_id}')
+        r.raise_for_status()
+        return r.json()
 
 
 class CerebroNeuron:
