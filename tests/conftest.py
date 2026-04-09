@@ -2,6 +2,13 @@ import pytest
 from unittest.mock import Mock
 from datetime import datetime
 
+
+@pytest.fixture(autouse=True)
+def cerebro_api_key_env(monkeypatch):
+    """TheHive/Cortex routes require ``Authorization: Bearer`` matching ``CEREBRO_API_KEY``."""
+    monkeypatch.setenv('CEREBRO_API_KEY', 'test-cortex-key')
+
+
 @pytest.fixture()
 def default_workers(mocker):
     """Create a fake list of workers."""

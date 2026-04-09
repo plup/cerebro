@@ -4,16 +4,17 @@ Cortex-compatible API surface that TheHive calls (status, analyzers, responders,
 import logging
 from importlib.metadata import version
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 
+from cerebro.auth import verify_api_key
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
 from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
 
 logger = logging.getLogger(__name__)
 audit = logging.getLogger('audit')
 
-router = APIRouter(tags=['thehive'])
+router = APIRouter(tags=['thehive'], dependencies=[Depends(verify_api_key)])
 
 
 @router.get("/api/status")
