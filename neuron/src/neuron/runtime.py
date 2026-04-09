@@ -76,7 +76,7 @@ class CerebroNeuron:
     def build_thehive_client(self) -> ThehiveClient | None:
         """Return a :class:`ThehiveClient` when ``TH_URL`` is set; otherwise ``None``."""
         try:
-            client = ThehiveClient()
+            client = ThehiveClient(verify=bool(int(environ.get('TH_VERIFY', '1'))))
             logger.info(f'TheHive client initialized for {client.base_url!r}')
             return client
         except KeyError:
