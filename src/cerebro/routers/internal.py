@@ -3,11 +3,10 @@ from os import environ
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
+from cerebro.auth import BEARER_PREFIX
 from cerebro.callback import store_job_report
 
 router = APIRouter(tags=['internal'])
-
-BEARER_PREFIX = 'Bearer '
 
 
 def verify_job_callback_token(authorization: str | None = Header(None)) -> None:

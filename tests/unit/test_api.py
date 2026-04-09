@@ -4,7 +4,8 @@ from fastapi.testclient import TestClient
 from cerebro.api import app
 from cerebro.models.cortex import *
 
-client = TestClient(app)
+_CORTEX_AUTH_HEADERS = {'Authorization': 'Bearer test-cortex-key'}
+client = TestClient(app, headers=_CORTEX_AUTH_HEADERS)
 
 def test_polling():
     """Simulate TheHive status checking."""
@@ -40,6 +41,18 @@ def test_get_responder(default_workers):
 def test_get_nothing():
     r = client.get('/api/analyzer/nothing')
     assert r.status_code == 404
+
+
+def test_thehive_routes_require_bearer(monkeypatch):
+    monkeypatch.setenv('CEREBRO_API_KEY', 'secret-key')
+    unauth = TestClient(app)
+    assert unauth.get('/api/status').status_code == 401
+
+
+def test_thehive_rejects_wrong_bearer(monkeypatch):
+    monkeypatch.setenv('CEREBRO_API_KEY', 'secret-key')
+    bad = TestClient(app, headers={'Authorization': 'Bearer wrong'})
+    assert bad.get('/api/status').status_code == 403
 
 
 def test_job_callback_stores_report(monkeypatch):

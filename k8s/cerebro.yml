@@ -9,6 +9,7 @@ data:
   workers.yml: |
     - name: foo
       type: responder
+      description: Short text shown in TheHive for this responder
       triggers:
         - observable:filename
         - observable:hostname
@@ -212,6 +213,8 @@ spec:
               value: http://cerebro:8000
             - name: CEREBRO_CALLBACK_SECRET
               value: thesecrettoken
+            - name: CEREBRO_API_KEY
+              value: cortex-api-key-change-me
             - name: TH_URL
               value: http://thehive:9000
             - name: TH_USER
