@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from os import environ
 from typing import Any
 
-import requests
+import httpx
 
 from neuron.thehive import ThehiveClient
 
@@ -100,11 +100,11 @@ class CerebroNeuron:
             return
         url = f"{base.rstrip('/')}/api/job/{job_id}/callback"
         logger.info(f'Posting report to Cerebro callback {url}')
-        r = requests.post(
+        r = httpx.post(
             url,
             json=report,
             headers={'Authorization': f'Bearer {token}'},
-            timeout=120,
+            timeout=120.0,
         )
         r.raise_for_status()
         logger.info(f'Cerebro callback accepted (HTTP {r.status_code})')

@@ -4,12 +4,16 @@ from __future__ import annotations
 from os import environ
 from typing import Any
 
-import requests
-from urllib.parse import urljoin
+from httpx import BasicAuth, Client
 
 
-class ThehiveClient(requests.Session):
-    """HTTP session for TheHive (``TH_URL``, ``TH_KEY`` or ``TH_USER`` / ``TH_PASSWORD``)."""
+class ThehiveClient(Client):
+    """
+    Sync HTTP client for TheHive (``TH_URL``, ``TH_KEY`` or ``TH_USER`` / ``TH_PASSWORD``).
+
+    Subclasses :class:`httpx.Client` so ``base_url``, request methods, and connection lifecycle
+    behave like httpx. Only adds TheHive-specific construction from env and :meth:`get_observable`.
+    """
 
     def __init__(
         self,
@@ -17,23 +21,34 @@ class ThehiveClient(requests.Session):
         key: str | None = None,
         user: str | None = None,
         password: str | None = None,
+        *,
+        timeout: float = 120.0,
+        verify: bool | str = True,
+        **kwargs: Any,
     ):
-        super().__init__()
-        self.base_url = base_url if base_url is not None else environ['TH_URL']
+        base = base_url if base_url is not None else environ['TH_URL']
         if key is None:
             key = environ.get('TH_KEY')
         if user is None:
             user = environ.get('TH_USER')
         if password is None:
             password = environ.get('TH_PASSWORD')
-        if key:
-            self.headers = {'Authorization': f'Bearer {key}'}
-        else:
-            self.auth = (user, password)
 
-    def request(self, method, url, *args, **kwargs):
-        joined_url = urljoin(self.base_url, url)
-        return super().request(method, joined_url, *args, **kwargs)
+        headers: dict[str, str] = {}
+        auth: BasicAuth | None = None
+        if key:
+            headers['Authorization'] = f'Bearer {key}'
+        else:
+            auth = BasicAuth(user or '', password or '')
+
+        super().__init__(
+            base_url=base,
+            headers=headers,
+            auth=auth,
+            timeout=timeout,
+            verify=verify,
+            **kwargs,
+        )
 
     def get_observable(self, observable_id: str) -> dict[str, Any]:
         """
@@ -41,8 +56,7 @@ class ThehiveClient(requests.Session):
 
         TheHive 4 / v0 deployments often expose case artifacts as
         ``GET /api/v0/case/artifact/{id}`` or alert artifacts as
-        ``GET /api/v0/alert/artifact/{id}`` instead; call :meth:`request` with those paths if
-        needed.
+        ``GET /api/v0/alert/artifact/{id}`` instead; use :meth:`get` with those paths if needed.
         """
         r = self.get(f'/api/v1/observable/{observable_id}')
         r.raise_for_status()
