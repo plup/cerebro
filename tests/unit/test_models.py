@@ -139,7 +139,6 @@ class TestCortexJobReport():
             object_type='observable:hostname',
             kube_status='Success',
             started=datetime.now(),
-            message='',
             callback_report={'success': True, 'full': {'message': 'from callback'}},
         )
         assert job.report['full']['message'] == 'from callback'
@@ -152,7 +151,6 @@ class TestCortexJobReport():
             object_type='observable:hostname',
             kube_status='Success',
             started=datetime.now(),
-            message='',
             callback_report={'full': {'message': 'done'}},
         )
         assert ok.report == {'success': True, 'full': {'message': 'done'}}
@@ -162,7 +160,6 @@ class TestCortexJobReport():
             object_type='observable:hostname',
             kube_status='Failure',
             started=datetime.now(),
-            message='',
             callback_report={'full': {'message': 'failed'}},
         )
         assert bad.report == {'success': False, 'full': {'message': 'failed'}}
@@ -175,7 +172,6 @@ class TestCortexJobReport():
             object_type='observable:hostname',
             kube_status='Success',
             started=datetime.now(),
-            message='',
             callback_report=None,
         )
         assert ok.report == {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
@@ -185,7 +181,6 @@ class TestCortexJobReport():
             object_type='observable:hostname',
             kube_status='Failure',
             started=datetime.now(),
-            message='',
             callback_report=None,
         )
         assert bad.report == {
@@ -201,7 +196,6 @@ class TestCortexJobReport():
             object_type='observable:hostname',
             kube_status='InProgress',
             started=datetime.now(),
-            message='',
             callback_report={'success': True, 'full': {'message': 'early'}},
         )
         assert job.report == {}
@@ -218,7 +212,6 @@ class TestCortexJobStatus():
             object_type='observable:hostname',
             kube_status='Success',
             started=datetime.now(),
-            message='',
             callback_report={'success': False, 'full': {'message': 'logic failure'}},
         )
         assert job.status == 'Failure'
@@ -231,7 +224,6 @@ class TestCortexJobStatus():
             object_type='observable:hostname',
             kube_status='Failure',
             started=datetime.now(),
-            message='',
             callback_report=None,
         )
         assert fail.status == 'Failure'
