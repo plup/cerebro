@@ -226,7 +226,6 @@ class K8sJob(BaseModel):
     kube_status: str
     started: datetime
     ended: datetime | None = None
-    message: str = ''
     callback_report: dict | None = Field(default=None, exclude=True)
 
     @staticmethod
