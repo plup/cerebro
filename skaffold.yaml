@@ -9,13 +9,13 @@ build:
     envTemplate:
       template: dev
   artifacts:
-    - image: server
+    - image: cerebro/server
       platforms:
         - linux/amd64
       context: .
       docker:
         dockerfile: k8s/cerebro.dock
-    - image: worker
+    - image: cerebro/worker
       platforms:
         - linux/amd64
       context: ./neuron

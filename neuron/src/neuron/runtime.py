@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from os import environ
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 
@@ -110,3 +110,12 @@ class CerebroNeuron:
         )
         r.raise_for_status()
         logger.info(f'Cerebro callback accepted (HTTP {r.status_code})')
+
+    def fail(self, message: str) -> NoReturn:
+        """
+        Record a failed run (``success: false`` and ``errorMessage``), POST it to Cerebro when
+        callback env vars are set, then exit the process with code 0 so the Job completes
+        successfully while TheHive still sees a failed Cortex report.
+        """
+        self.send_report(Report(error_message=message))
+        raise SystemExit(0)

@@ -9,17 +9,15 @@ class Report:
     Mutable builder for analyzer/responder ``report`` dicts (``success``, ``summary``, ``full``,
     ``operations``, ``artifacts``).
 
-    ``success`` defaults to ``True``; call :meth:`fail` with an error message to record a failed run
-    (replaces the whole report with only ``success`` and ``errorMessage``).
+    Default ``success`` is ``True``. Pass ``error_message`` to build a failed run (only
+    ``success`` and ``errorMessage``), as posted by ``CerebroNeuron.fail`` in ``runtime``.
     """
 
-    def __init__(self) -> None:
-        self._data: dict[str, Any] = {'success': True}
-
-    def fail(self, message: str) -> Self:
-        """Replace the report with a failed run: only ``success`` and ``errorMessage``."""
-        self._data = {'success': False, 'errorMessage': message}
-        return self
+    def __init__(self, *, error_message: str | None = None) -> None:
+        if error_message is None:
+            self._data: dict[str, Any] = {'success': True}
+        else:
+            self._data = {'success': False, 'errorMessage': error_message}
 
     def set_details(self, details: dict[str, Any]) -> Self:
         """Replace the Cortex ``full`` object (query, details, short message, …)."""
