@@ -12,12 +12,16 @@ from os import environ
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
-from datetime import datetime
-from pydantic import (BaseModel, Field, computed_field, field_validator, ValidationError,
-                      ConfigDict, PrivateAttr)
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, ValidationError, computed_field
 from kubernetes import client, config, utils
+from kubernetes.utils.create_from_yaml import FailToCreateError
 
-from cerebro.callback import get_stored_report
+from cerebro.callback import (
+    get_job_report,
+    get_synthetic_failed_job,
+    store_synthetic_failed_job,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +179,41 @@ class JobExecutionError(RuntimeError):
     """The job failed to execute."""
 
 
+def kubernetes_api_exception_detail(exc: client.exceptions.ApiException) -> str:
+    """Return a log- or user-facing line from a Kubernetes ``ApiException`` (``Status.message`` when JSON)."""
+    reason = (getattr(exc, 'reason', None) or '').strip() or 'Kubernetes API error'
+    body = getattr(exc, 'body', None)
+    if not body:
+        return reason
+    if isinstance(body, bytes):
+        text = body.decode('utf-8', errors='replace')
+    else:
+        text = str(body)
+    try:
+        obj = json.loads(text)
+        msg = obj.get('message')
+        if isinstance(msg, str) and msg.strip():
+            return msg.strip()
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return text.strip() or reason
+
+
+def fail_to_create_error_detail(exc: FailToCreateError) -> str:
+    subs = getattr(exc, 'api_exceptions', None) or ()
+    parts = [
+        kubernetes_api_exception_detail(sub)
+        if isinstance(sub, client.exceptions.ApiException)
+        else str(sub)
+        for sub in subs
+    ]
+    return (
+        '; '.join(p for p in parts if p)
+        or str(exc).strip()
+        or 'Kubernetes refused to create the Job'
+    )
+
+
 class Worker(BaseModel):
     name: str
     type: str
@@ -187,7 +226,7 @@ class Worker(BaseModel):
     @property
     def id(self) -> str:
         """Bind name and id."""
-        # this solves a bug from TheHive requesting anlyzer by id but providing a name
+        # this solves a bug from TheHive requesting analyzer by id but providing a name
         return self.name
 
     @classmethod
@@ -280,17 +319,22 @@ class K8sJob(BaseModel):
             )
 
         except KeyError as e:
-            logger.error(f'{e} not define in manifest')
-            raise WorkerConfigurationError(f'The k8s manifest is not define properly')
+            logger.error(f'{e!r} is missing from the worker manifest')
+            raise WorkerConfigurationError('The Kubernetes manifest for this worker is invalid')
 
         # create the job
         try:
             namespace = cls.load_kube_config()
             k8s_job = utils.create_from_dict(client.ApiClient(), manifest, namespace=namespace)[0]
             logger.info(f'Creating {k8s_job.metadata.name}')
+        except FailToCreateError as e:
+            detail = fail_to_create_error_detail(e)
+            logger.error(f'Kubernetes create Job failed: {detail}')
+            return cls.synthetic_failure_job(worker, artefact, detail)
         except client.exceptions.ApiException as e:
-            logger.error(e)
-            raise JobExecutionError('Failed to create the kube job')
+            detail = kubernetes_api_exception_detail(e)
+            logger.error(f'Kubernetes create Job failed: {detail}')
+            return cls.synthetic_failure_job(worker, artefact, detail)
 
         return cls(
             id = k8s_job.metadata.name,
@@ -302,24 +346,67 @@ class K8sJob(BaseModel):
         )
 
     @classmethod
+    def synthetic_failure_job(cls, worker: 'Worker', artefact: Any, detail: str) -> 'K8sJob':
+        """
+        Build a completed Failure job when Kubernetes never created a Job.
+
+        Stores a synthetic record so :meth:`fetch` can rebuild the same object for polling.
+        """
+        job_id = f'cerebro-local-{uuid4()}'
+        now = datetime.now(timezone.utc)
+        report: dict[str, Any] = {'success': False, 'errorMessage': detail}
+        store_synthetic_failed_job(
+            job_id,
+            worker=worker.model_dump(),
+            object_type=artefact.type,
+            started=now,
+            ended=now,
+            callback_report=report,
+        )
+        return cls(
+            id=job_id,
+            worker=worker,
+            object_type=artefact.type,
+            kube_status='Failure',
+            started=now,
+            ended=now,
+            callback_report=report,
+        )
+
+    @classmethod
     def fetch(cls, job_id):
+        if (synthetic := get_synthetic_failed_job(job_id)) is not None:
+            worker = Worker.model_validate(synthetic['worker'])
+            started = datetime.fromisoformat(synthetic['started'])
+            ended_raw = synthetic.get('ended') or ''
+            ended = datetime.fromisoformat(ended_raw) if ended_raw else None
+            return cls(
+                id=job_id,
+                worker=worker,
+                object_type=synthetic['object_type'],
+                kube_status='Failure',
+                started=started,
+                ended=ended,
+                callback_report=synthetic['callback_report'],
+            )
+
         # read the job from kube
         try:
             namespace = cls.load_kube_config()
             k8s_job = client.BatchV1Api().read_namespaced_job(name=job_id, namespace=namespace)
 
         except client.exceptions.ApiException as e:
-            logger.error(e)
+            logger.error(str(e))
             raise JobExecutionError(f"Can't access job {job_id} in kube")
 
-        # retreive worker parameters
+        # retrieve worker parameters
         try:
             worker = Worker.get(k8s_job.metadata.annotations['cerebro/worker'])
             object_type = k8s_job.metadata.annotations['cerebro/type']
 
         except KeyError as e:
-            logger.error(e)
-            raise JobExecutionError("Can't retreive worker config from the job's annotations")
+            logger.error(str(e))
+            raise JobExecutionError("Can't retrieve worker config from the job's annotations")
 
         if k8s_job.status.active:
             # nothing to return if the job is still executing
@@ -338,7 +425,7 @@ class K8sJob(BaseModel):
             kube_status = kube_status,
             started = k8s_job.metadata.creation_timestamp,
             ended = k8s_job.status.completion_time,
-            callback_report = get_stored_report(job_id),
+            callback_report = get_job_report(job_id),
         )
 
 class ThehiveArtefact(BaseModel):
@@ -369,7 +456,7 @@ class ThehiveArtefact(BaseModel):
             dt = event['dataType']
             # Nested payloads (TheHive object references)
             if dt == 'thehive:case_artifact':
-                artefact['type'] = 'observable:' + event['data']['dataType']
+                artefact['type'] = f'observable:{event["data"]["dataType"]}'
                 artefact['id'] = event['data']['id']
                 try:
                     artefact['ctx_id'] = event['data']['alert']['id']

@@ -1,7 +1,7 @@
 import pytest
 import yaml
 from datetime import datetime
-from cerebro.models.base import Worker, K8sJob, ThehiveArtefact, WorkerConfigurationError, JobExecutionError
+from cerebro.models.base import Worker, K8sJob, ThehiveArtefact, WorkerConfigurationError
 from cerebro.models.cortex import Analyzer, Responder, CortexJob, NO_CALLBACK_REPORT_MESSAGE
 
 _MINIMAL_MANIFEST = {
