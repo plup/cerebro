@@ -4,11 +4,28 @@ Cerebro is an in-place replacement for Cortex. The base model layer contains all
 Cerebro needs to operate; this module extends those types so responses and job objects match what
 Cortex exposes (e.g. analyzers, responders, and ``CortexJob`` for TheHive).
 """
+from datetime import datetime, timezone
+
 from pydantic import Field, computed_field
 from .base import Worker, K8sJob
 
 # Shown in ``report`` when the job finished without a callback payload (Cortex-compatible text).
 NO_CALLBACK_REPORT_MESSAGE = 'No report has been generated.'
+
+# Minimal manifest so :class:`Worker` validates when building a job-only error response.
+_FETCH_FAILURE_WORKER_MANIFEST = {
+    'apiVersion': 'batch/v1',
+    'kind': 'Job',
+    'metadata': {'generateName': 'cerebro-fetch-error-'},
+    'spec': {
+        'template': {
+            'spec': {
+                'restartPolicy': 'Never',
+                'containers': [{'name': 'job', 'image': 'invalid.invalid/cerebro-placeholder'}],
+            }
+        }
+    },
+}
 
 
 class Analyzer(Worker):
@@ -50,6 +67,31 @@ class CortexJob(K8sJob):
     worker: Worker = Field(exclude=True)
     kube_status: str = Field(exclude=True)
     organization: str = '' # Cortex normally returns organization but it's apparently not checked by TheHive
+
+    @classmethod
+    def from_fetch_failure(cls, job_id: str, message: str) -> 'CortexJob':
+        """
+        Build a terminal Failure job when the cluster job cannot be read (missing id, API error, bad annotations).
+
+        TheHive still gets HTTP 200 with ``status`` / ``report`` describing the error.
+        """
+        now = datetime.now(timezone.utc)
+        stub = Worker(
+            name='cerebro-fetch-error',
+            type='analyzer',
+            triggers=[],
+            manifest=_FETCH_FAILURE_WORKER_MANIFEST,
+        )
+        report = {'success': False, 'errorMessage': message}
+        return cls(
+            id=job_id,
+            worker=stub,
+            object_type='',
+            kube_status='Failure',
+            started=now,
+            ended=now,
+            callback_report=report,
+        )
 
     @computed_field
     @property

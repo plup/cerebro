@@ -9,7 +9,12 @@ from pydantic import ValidationError
 
 from cerebro.auth import verify_api_key
 from cerebro.models.cortex import Analyzer, Responder, CortexJob
-from cerebro.models.base import ThehiveArtefact, WorkerNotFoundError
+from cerebro.models.base import (
+    JobExecutionError,
+    ThehiveArtefact,
+    WorkerConfigurationError,
+    WorkerNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 audit = logging.getLogger('audit')
@@ -71,7 +76,12 @@ def run_analyzer(id: str, event: dict) -> CortexJob:
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    return CortexJob.create(worker_id=id, artefact=artefact)
+    try:
+        return CortexJob.create(worker_id=id, artefact=artefact)
+    except WorkerNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except WorkerConfigurationError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/api/responder/_search")
@@ -114,7 +124,12 @@ def run_responder(id: str, event: dict) -> CortexJob:
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    return CortexJob.create(worker_id=id, artefact=artefact)
+    try:
+        return CortexJob.create(worker_id=id, artefact=artefact)
+    except WorkerNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except WorkerConfigurationError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post('/api/job/status')
@@ -122,7 +137,11 @@ def get_jobs_status(job_ids: dict) -> dict:
     """Return the status for the jobs."""
     status = {}
     for _id in job_ids['jobIds']:
-        status[_id] = CortexJob.fetch(_id).status
+        try:
+            status[_id] = CortexJob.fetch(_id).status
+        except JobExecutionError as e:
+            logger.error(str(e))
+            status[_id] = CortexJob.from_fetch_failure(_id, str(e)).status
     logger.debug(f'Status returned: {status}')
     return status
 
@@ -130,6 +149,10 @@ def get_jobs_status(job_ids: dict) -> dict:
 @router.get('/api/job/{id}/waitreport')
 def get_job_report(id: str) -> CortexJob:
     """Return the CortexJob including a report."""
-    job = CortexJob.fetch(id)
+    try:
+        job = CortexJob.fetch(id)
+    except JobExecutionError as e:
+        logger.error(str(e))
+        job = CortexJob.from_fetch_failure(id, str(e))
     logger.debug(f'Job returned: {job.model_dump()}')
     return job

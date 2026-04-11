@@ -1,7 +1,10 @@
 """Module testing the fastapi response validation."""
-from time import sleep
 from fastapi.testclient import TestClient
+from kubernetes.client.exceptions import ApiException
+from kubernetes.utils.create_from_yaml import FailToCreateError
+
 from cerebro.api import app
+from cerebro.models.base import JobExecutionError
 from cerebro.models.cortex import *
 
 _CORTEX_AUTH_HEADERS = {'Authorization': 'Bearer test-cortex-key'}
@@ -63,9 +66,9 @@ def test_job_callback_stores_report(monkeypatch):
         headers={'Authorization': 'Bearer test-secret'},
     )
     assert r.status_code == 200
-    from cerebro.callback import get_stored_report
+    from cerebro.callback import get_job_report
 
-    assert get_stored_report('my-job-id') == {'success': True, 'full': {'message': 'ok'}}
+    assert get_job_report('my-job-id') == {'success': True, 'full': {'message': 'ok'}}
 
 
 def test_job_callback_rejects_bad_token(monkeypatch):
@@ -76,6 +79,37 @@ def test_job_callback_rejects_bad_token(monkeypatch):
         headers={'Authorization': 'Bearer wrong'},
     )
     assert r.status_code == 403
+
+
+def test_run_analyzer_kubernetes_admission_denied(default_workers, mocker):
+    """Kyverno / admission failures return a finished job with error in ``report`` (HTTP 200)."""
+    mocker.patch('cerebro.models.base.K8sJob.load_kube_config', return_value='default')
+    api_ex = ApiException(status=400, reason='Bad Request')
+    api_ex.body = (
+        '{"kind":"Status","status":"Failure","message":"policy: images must use SHA256","code":400}'
+    )
+    mocker.patch(
+        'cerebro.models.base.utils.create_from_dict',
+        side_effect=FailToCreateError([api_ex]),
+    )
+    payload = {
+        'tlp': 2,
+        'pap': 2,
+        'dataType': 'hostname',
+        'data': 'x',
+        'parameters': {'organisation': 'org', 'user': 'nobody@nowhere.io'},
+    }
+    r = client.post('/api/analyzer/bar/run', json=payload)
+    assert r.status_code == 200
+    body = r.json()
+    assert body['status'] == 'Failure'
+    assert body['report']['success'] is False
+    assert 'SHA256' in body['report']['errorMessage']
+    job_id = body['id']
+    assert job_id.startswith('cerebro-local-')
+    wr = client.get(f'/api/job/{job_id}/waitreport')
+    assert wr.status_code == 200
+    assert wr.json()['report']['errorMessage'] == body['report']['errorMessage']
 
 
 def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
@@ -175,3 +209,27 @@ def test_run_responder_with_alert(default_workers, k8s_create_job):
     assert env['CEREBRO_OBJECT_ID'] == '~1'
     assert env['CEREBRO_CONTEXT_TYPE'] == 'alert'
     assert env['CEREBRO_CONTEXT_ID'] == '~2'
+
+
+def test_waitreport_when_fetch_fails_returns_failure_with_report(mocker):
+    mocker.patch(
+        'cerebro.models.base.K8sJob.fetch',
+        side_effect=JobExecutionError("Can't access job missing in kube"),
+    )
+    r = client.get('/api/job/missing-id/waitreport')
+    assert r.status_code == 200
+    body = r.json()
+    assert body['id'] == 'missing-id'
+    assert body['status'] == 'Failure'
+    assert body['report']['success'] is False
+    assert 'missing in kube' in body['report']['errorMessage']
+
+
+def test_job_status_when_fetch_fails_reports_failure(mocker):
+    mocker.patch(
+        'cerebro.models.base.K8sJob.fetch',
+        side_effect=JobExecutionError('unavailable'),
+    )
+    r = client.post('/api/job/status', json={'jobIds': ['j1', 'j2']})
+    assert r.status_code == 200
+    assert r.json() == {'j1': 'Failure', 'j2': 'Failure'}
