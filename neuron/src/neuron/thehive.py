@@ -15,8 +15,8 @@ class ThehiveClient(Client):
     Sync HTTP client for TheHive (``TH_URL``, ``TH_KEY`` or ``TH_USER`` / ``TH_PASSWORD``).
 
     Subclasses :class:`httpx.Client` so ``base_url``, request methods, and connection lifecycle
-    behave like httpx. Adds TheHive-specific construction from env, :meth:`get_observable`, and
-    :meth:`add_attachments` for cases and alerts.
+    behave like httpx. Adds TheHive-specific construction from env, :meth:`get_observable`,
+    :meth:`tag_observable`, :meth:`untag_observable`, and :meth:`add_attachments` for cases and alerts.
     """
 
     def __init__(
@@ -65,6 +65,28 @@ class ThehiveClient(Client):
         r = self.get(f'/api/v1/observable/{observable_id}')
         r.raise_for_status()
         return r.json()
+
+    def tag_observable(self, observable_id: str, tags: Sequence[str]) -> None:
+        """
+        Add tags to an observable (TheHive 5+ ``PATCH /api/v1/observable/{id}`` with ``addTags``).
+
+        Existing tags are left in place; ``tags`` are merged in. Requires ``manageObservable``.
+        """
+        if not tags:
+            raise ValueError('tags must contain at least one tag')
+        r = self.patch(f'/api/v1/observable/{observable_id}', json={'addTags': list(tags)})
+        r.raise_for_status()
+
+    def untag_observable(self, observable_id: str, tags: Sequence[str]) -> None:
+        """
+        Remove tags from an observable (TheHive 5+ ``PATCH /api/v1/observable/{id}`` with ``removeTags``).
+
+        Tags not present on the observable are ignored by the server. Requires ``manageObservable``.
+        """
+        if not tags:
+            raise ValueError('tags must contain at least one tag')
+        r = self.patch(f'/api/v1/observable/{observable_id}', json={'removeTags': list(tags)})
+        r.raise_for_status()
 
     def add_attachments(
         self,
