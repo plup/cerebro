@@ -417,6 +417,7 @@ class K8sJob(BaseModel):
                 kube_status = 'Failure'
             else:
                 kube_status = 'Success'
+            logger.info(f'Job {job_id} terminated with kube status {kube_status}')
 
         return cls(
             id = job_id,
