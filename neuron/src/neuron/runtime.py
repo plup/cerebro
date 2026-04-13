@@ -117,5 +117,6 @@ class CerebroNeuron:
         callback env vars are set, then exit the process with code 0 so the Job completes
         successfully while TheHive still sees a failed Cortex report.
         """
+        logger.error(f'Neuron failed: {message}')
         self.send_report(Report(error_message=message))
         raise SystemExit(0)
