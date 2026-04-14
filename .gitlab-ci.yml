@@ -1,0 +1,13 @@
+build:
+  stage: deploy
+  image:
+    name: $PODMAN_IMAGE
+  tags:
+    - engine:podman
+    - arch:amd64
+  script:
+    - podman login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - podman build -t "$CI_REGISTRY_IMAGE:${CI_COMMIT_SHORT_SHA}" .
+    - podman push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+  only:
+    - main
