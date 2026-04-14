@@ -1,6 +1,8 @@
 """FastAPI application: Cortex-compatible API for TheHive plus internal worker callbacks."""
 import json
 import logging
+from contextlib import asynccontextmanager
+from importlib.metadata import version
 
 from fastapi import FastAPI
 from starlette.requests import Request
@@ -9,7 +11,14 @@ from cerebro.routers import internal, thehive
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title='cerebro')
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info('cerebro version %s', version('cerebro'))
+    yield
+
+
+app = FastAPI(title='cerebro', lifespan=lifespan)
 
 app.include_router(thehive.router)
 app.include_router(internal.router)
