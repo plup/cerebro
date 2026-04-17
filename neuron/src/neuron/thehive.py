@@ -16,7 +16,8 @@ class ThehiveClient(Client):
 
     Subclasses :class:`httpx.Client` so ``base_url``, request methods, and connection lifecycle
     behave like httpx. Adds TheHive-specific construction from env, :meth:`get_observable`,
-    :meth:`tag_observable`, :meth:`untag_observable`, and :meth:`add_attachments` for cases and alerts.
+    :meth:`tag_observable`, :meth:`untag_observable`, :meth:`add_attachments`, and
+    :meth:`add_attachment_stream` for cases and alerts.
     """
 
     def __init__(
@@ -103,6 +104,9 @@ class ThehiveClient(Client):
         filename); tuple items are ``(filename, bytes | binary stream)`` or include an optional MIME type
         as a third element. File handles opened from paths are closed after the request; streams supplied
         in tuples are left to the caller.
+
+        For a single large object (e.g. S3 ``get_object`` :class:`~botocore.response.StreamingBody`),
+        prefer :meth:`add_attachment_stream` so closing behavior and intent are explicit.
         """
         if type not in ('alert', 'case'):
             raise ValueError(f'type must be "case" or "alert", got {type!r}')
@@ -145,3 +149,39 @@ class ThehiveClient(Client):
         finally:
             for fh in opened:
                 fh.close()
+
+    def add_attachment_stream(
+        self,
+        entity_id: str,
+        filename: str,
+        stream: BinaryIO,
+        *,
+        type: Literal['case', 'alert'],
+        content_type: str = 'application/octet-stream',
+        can_rename: bool = False,
+        close_stream: bool = True,
+    ) -> dict[str, Any]:
+        """
+        POST one multipart attachment read from ``stream`` (chunked; not buffered entirely in memory).
+
+        Use this for large files when the payload is already a readable binary stream, for example the
+        ``Body`` from ``boto3.client('s3').get_object(Bucket=..., Key=...)`` or another producer that
+        implements :class:`~typing.BinaryIO`.
+
+        ``close_stream``: when true (default), ``stream.close()`` is called after the HTTP request
+        finishes (success or HTTP error after the attempt), so S3 response bodies and temp files are
+        not leaked. Set false if the same stream must remain open for the caller.
+        """
+        try:
+            return self.add_attachments(
+                entity_id,
+                [(filename, stream, content_type)],
+                type=type,
+                can_rename=can_rename,
+            )
+        finally:
+            if close_stream:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
