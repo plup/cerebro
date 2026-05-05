@@ -54,7 +54,7 @@ spec:
                 path: rules.yaml
       containers:
         - name: cerebro-lab
-          image: server
+          image: cerebro/server
           imagePullPolicy: IfNotPresent
           command: ["uvicorn", "cerebro.api:app", "--host", "0.0.0.0", "--log-config", "/etc/log.yml"]
           securityContext:

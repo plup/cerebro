@@ -31,7 +31,9 @@ manifests:
     - k8s/deployment.yaml
     - k8s/rbac.yaml
     - k8s/service.yaml
-# Rewrite the worker image in the ConfigMap (see .data.worker_image).
+# Skaffold fixes .data.worker_image in the app ConfigMap to the built worker tag/digest.
+# Per-worker ``worker.yml`` Job blobs omit ``containers[].image``; Cerebro sets it from
+# OVERRIDE_WORKER_IMAGE (wired to that ConfigMap key).
 # https://skaffold.dev/docs/tutorials/skaffold-resource-selector/
 resourceSelector:
   allow:
