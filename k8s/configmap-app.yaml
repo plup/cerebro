@@ -1,0 +1,36 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cerebro-lab
+data:
+  # Skaffold artifact name `worker` — replaced by resourceSelector with the built tag/digest.
+  worker_image: worker
+  log.yml: |
+    version: 1
+    disable_existing_loggers: false
+    formatters:
+      simple:
+        format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    handlers:
+      console:
+        class : logging.StreamHandler
+        formatter: simple
+        level   : DEBUG
+        stream  : ext://sys.stdout
+    root:
+      level: WARNING # max level set to the handler
+      handlers: [console]
+    loggers:
+      uvicorn.error:
+        level: INFO
+        handlers: [console]
+        propagate: no
+      cerebro:
+        level: DEBUG
+        handlers: [console]
+        propagate: no
+      audit:
+        level: INFO
+        handlers: [console]
+        propagate: no

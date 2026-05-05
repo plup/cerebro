@@ -1,0 +1,39 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cerebro-lab-worker-bar
+data:
+  worker.yml: |
+    name: bar
+    type: analyzer
+    description: Test analyzer designed to support all operations
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-lab-job-
+        labels:
+          cerebro-lab/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: True
+              runAsUser: 65534
+            containers:
+              - name: job
+                image: worker
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault

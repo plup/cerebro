@@ -20,7 +20,7 @@ jobs:
         include:
           - name: server
             context: .
-            file: k8s/cerebro.dock
+            file: k8s/Dockerfile
             image_suffix: "-server"
           - name: worker
             context: neuron

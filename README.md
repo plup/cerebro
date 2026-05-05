@@ -11,7 +11,7 @@ Blueteam automation orchestrator: Cortex-compatible API for TheHive and Kubernet
 
 Build the images:
 ```
-$ docker buildx build . -t cerebro -f k8s/cerebro.dock
+$ docker buildx build . -t cerebro -f k8s/Dockerfile
 $ docker build -f neuron/Dockerfile neuron -t worker
 ```
 
