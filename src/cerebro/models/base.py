@@ -122,7 +122,7 @@ def inject_callback_env(manifest: dict) -> None:
 THEHIVE_WORKER_ENV_NAMES = ('TH_URL', 'TH_KEY', 'TH_USER', 'TH_PASSWORD')
 
 
-def inject_cerebro_invocation_env(manifest: dict, artefact: Any) -> None:
+def inject_cerebro_invocation_env(manifest: dict, artefact: Any, worker_name: str) -> None:
     """
     Pass analyzer/responder invocation fields to the worker container via environment variables.
 
@@ -134,6 +134,7 @@ def inject_cerebro_invocation_env(manifest: dict, artefact: Any) -> None:
         'CEREBRO_OBJECT_ID': artefact.id,
         'CEREBRO_CONTEXT_TYPE': artefact.ctx_type or '',
         'CEREBRO_CONTEXT_ID': artefact.ctx_id or '',
+        'CEREBRO_WORKER_NAME': worker_name,
     }
     container = manifest['spec']['template']['spec']['containers'][0]
     env = container.setdefault('env', [])
@@ -312,7 +313,7 @@ class K8sJob(BaseModel):
             if 'CEREBRO_INVOCATION_TYPE' not in existing:
                 env.append({'name': 'CEREBRO_INVOCATION_TYPE', 'value': worker.type})
 
-            inject_cerebro_invocation_env(manifest, artefact)
+            inject_cerebro_invocation_env(manifest, artefact, worker.name)
 
             logger.info(
                 f'Launching job {worker.name} worker.type={worker.type} object_type={artefact.type}'
