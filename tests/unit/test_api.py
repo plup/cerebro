@@ -135,6 +135,7 @@ def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
         if isinstance(e, dict) and 'name' in e
     }
     assert env['CEREBRO_INVOCATION_TYPE'] == 'analyzer'
+    assert env['CEREBRO_WORKER_NAME'] == 'bar'
     assert env['CEREBRO_OBJECT_TYPE'] == 'observable:hostname'
     assert env['CEREBRO_OBJECT_VALUE'] == 'VJ2C9N'
     assert env['CEREBRO_CONTEXT_TYPE'] == ''
@@ -205,6 +206,7 @@ def test_run_responder_with_alert(default_workers, k8s_create_job):
         if isinstance(e, dict) and 'name' in e
     }
     assert env['CEREBRO_INVOCATION_TYPE'] == 'responder'
+    assert env['CEREBRO_WORKER_NAME'] == 'foo'
     assert env['CEREBRO_OBJECT_TYPE'] == 'observable:filename'
     assert env['CEREBRO_OBJECT_ID'] == '~1'
     assert env['CEREBRO_CONTEXT_TYPE'] == 'alert'

@@ -19,6 +19,7 @@ class InvocationParams:
     """Invocation target for a neuron run (from Cerebro-injected ``CEREBRO_*`` environment variables)."""
 
     role: str
+    worker_name: str
     object_type: str
     object_value: str | None
     object_id: str | None
@@ -32,6 +33,10 @@ class InvocationParams:
             role = environ['CEREBRO_INVOCATION_TYPE']
         except KeyError as e:
             raise ValueError('CEREBRO_INVOCATION_TYPE is required') from e
+        try:
+            worker_name = environ['CEREBRO_WORKER_NAME']
+        except KeyError as e:
+            raise ValueError('CEREBRO_WORKER_NAME is required') from e
         if role not in ('analyzer', 'responder'):
             raise ValueError('CEREBRO_INVOCATION_TYPE must be analyzer or responder')
 
@@ -56,6 +61,7 @@ class InvocationParams:
 
         return cls(
             role=role,
+            worker_name=worker_name,
             object_type=object_type,
             object_value=object_value,
             object_id=object_id,
