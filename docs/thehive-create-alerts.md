@@ -1,7 +1,7 @@
 # TheHive create alerts
 
 ```
-$ curl -u user@thehive.local:'<pass>' -H 'Content-Type: application/json' https://thehive.blueteam-dev.deimos.kraken.zone/api/v1/alert -d '{
+$ curl -u user@thehive.local:'<pass>' -H 'Content-Type: application/json' https://thehive/api/v1/alert -d '{
   "type": "alertType",
   "source": "test",
   "sourceRef": "1",

@@ -4,8 +4,8 @@ kind: ConfigMap
 metadata:
   name: cerebro-lab
 data:
-  # Skaffold artifact name `worker` — replaced by resourceSelector with the built tag/digest.
-  worker_image: worker
+  # Skaffold artifact `cerebro/worker` — replaced by resourceSelector with the built tag/digest.
+  worker_image: cerebro/worker
   log.yml: |
     version: 1
     disable_existing_loggers: false

@@ -29,7 +29,7 @@ data:
               runAsUser: 65534
             containers:
               - name: job
-                image: worker
+                # image set at job-create time from OVERRIDE_WORKER_IMAGE (ConfigMap cerebro-lab.worker_image).
                 securityContext:
                   privileged: false
                   allowPrivilegeEscalation: false
