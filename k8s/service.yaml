@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cerebro-lab
+  labels:
+    app: cerebro-lab
+spec:
+  ports:
+    - port: 8000
+  selector:
+    app: cerebro-lab

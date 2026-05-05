@@ -14,7 +14,7 @@ build:
         - linux/amd64
       context: .
       docker:
-        dockerfile: k8s/cerebro.dock
+        dockerfile: k8s/Dockerfile
     - image: cerebro/worker
       platforms:
         - linux/amd64
@@ -23,7 +23,14 @@ build:
         dockerfile: Dockerfile
 manifests:
   rawYaml:
-    - k8s/cerebro.yml
+    - k8s/configmap-app.yaml
+    - k8s/configmap-thehive-webhook-rules.yaml
+    - k8s/configmap-worker-bar.yaml
+    - k8s/configmap-worker-fail.yaml
+    - k8s/configmap-worker-foo.yaml
+    - k8s/deployment.yaml
+    - k8s/rbac.yaml
+    - k8s/service.yaml
 # Rewrite the worker image in the ConfigMap (see .data.worker_image).
 # https://skaffold.dev/docs/tutorials/skaffold-resource-selector/
 resourceSelector:

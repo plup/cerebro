@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cerebro-lab-thehive-webhook-rules
+data:
+  thehive-webhook-rules.yaml: |
+    # Notifier body must embed ``observable`` (type hostname, nested alert) for this rule.
+    rules:
+      - id: observable-hostname-created-in-alert-responder-foo
+        workers:
+          - foo
+        match:
+          observable.type: hostname
+        required_paths:
+          - observable.data
+          - observable.id
+          - observable.alert
+        invocation: case_artifact_analyzer_hostname_in_alert
