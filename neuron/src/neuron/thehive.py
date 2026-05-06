@@ -16,8 +16,8 @@ class ThehiveClient(Client):
 
     Subclasses :class:`httpx.Client` so ``base_url``, request methods, and connection lifecycle
     behave like httpx. Adds TheHive-specific construction from env, :meth:`get_observable`,
-    :meth:`tag_observable`, :meth:`untag_observable`, :meth:`add_attachments`, and
-    :meth:`add_attachment_stream` for cases and alerts.
+    :meth:`tag_observable`, :meth:`untag_observable`, :meth:`post_comment`,
+    :meth:`add_attachments`, and :meth:`add_attachment_stream` for cases and alerts.
     """
 
     def __init__(
@@ -88,6 +88,29 @@ class ThehiveClient(Client):
             raise ValueError('tags must contain at least one tag')
         r = self.patch(f'/api/v1/observable/{observable_id}', json={'removeTags': list(tags)})
         r.raise_for_status()
+
+    def post_comment(
+        self,
+        entity_id: str,
+        message: str,
+        *,
+        type: Literal['case', 'alert'],
+    ) -> dict[str, Any]:
+        """
+        Create a comment on a case or alert (TheHive 5+ ``POST /api/v1/{type}/{entityId}/comment``).
+
+        Sends ``{"message": ...}`` as ``InputComment``. Requires ``manageComment``. Returns the
+        created entity JSON body (typically 201 ``OutputComment``).
+        """
+        if type not in ('alert', 'case'):
+            raise ValueError(f'type must be "case" or "alert", got {type!r}')
+        text = message.strip()
+        if not text:
+            raise ValueError('message must be non-empty')
+        path = f'/api/v1/{type}/{entity_id}/comment'
+        r = self.post(path, json={'message': text})
+        r.raise_for_status()
+        return r.json()
 
     def add_attachments(
         self,
