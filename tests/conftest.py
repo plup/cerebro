@@ -9,6 +9,22 @@ def cerebro_api_key_env(monkeypatch):
     monkeypatch.setenv('CEREBRO_API_KEY', 'test-cortex-key')
 
 
+@pytest.fixture(autouse=True)
+def clear_cerebro_in_memory_job_stores():
+    """Isolate tests that use process-local job/report stores in ``cerebro.callback``."""
+    import cerebro.callback as cb
+
+    with cb._lock:
+        cb._reports.clear()
+        cb._synthetic_failed_jobs.clear()
+        cb._launched_jobs.clear()
+    yield
+    with cb._lock:
+        cb._reports.clear()
+        cb._synthetic_failed_jobs.clear()
+        cb._launched_jobs.clear()
+
+
 @pytest.fixture()
 def default_workers(mocker):
     """Create a fake list of workers."""

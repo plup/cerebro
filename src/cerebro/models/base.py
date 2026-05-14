@@ -18,8 +18,11 @@ from kubernetes import client, config, utils
 from kubernetes.utils.create_from_yaml import FailToCreateError
 
 from cerebro.callback import (
+    delete_launched_job,
     get_job_report,
+    get_launched_job,
     get_synthetic_failed_job,
+    store_launched_job,
     store_synthetic_failed_job,
 )
 
@@ -337,12 +340,20 @@ class K8sJob(BaseModel):
             logger.error(f'Kubernetes create Job failed: {detail}')
             return cls.synthetic_failure_job(worker, artefact, detail)
 
+        started = k8s_job.metadata.creation_timestamp or datetime.now(timezone.utc)
+        store_launched_job(
+            k8s_job.metadata.name,
+            worker=worker.model_dump(),
+            object_type=artefact.type,
+            started=started,
+        )
+
         return cls(
             id = k8s_job.metadata.name,
             worker = worker,
             object_type = artefact.type,
             kube_status = 'Waiting',
-            started = k8s_job.metadata.creation_timestamp,
+            started = started,
             callback_report = None,
         )
 
@@ -397,6 +408,26 @@ class K8sJob(BaseModel):
             k8s_job = client.BatchV1Api().read_namespaced_job(name=job_id, namespace=namespace)
 
         except client.exceptions.ApiException as e:
+            if getattr(e, 'status', None) == 404 and (launched := get_launched_job(job_id)):
+                logger.warning(
+                    'Kubernetes job %s not found (404); answering TheHive with terminal Failure '
+                    'using stored worker metadata',
+                    job_id,
+                )
+                now = datetime.now(timezone.utc)
+                started = datetime.fromisoformat(launched['started'])
+                detail = kubernetes_api_exception_detail(e)
+                report: dict[str, Any] = {'success': False, 'errorMessage': detail}
+                store_synthetic_failed_job(
+                    job_id,
+                    worker=launched['worker'],
+                    object_type=launched['object_type'],
+                    started=started,
+                    ended=now,
+                    callback_report=report,
+                )
+                delete_launched_job(job_id)
+                return cls.fetch(job_id)
             logger.error(str(e))
             raise JobExecutionError(f"Can't access job {job_id} in kube")
 
@@ -419,6 +450,9 @@ class K8sJob(BaseModel):
             else:
                 kube_status = 'Success'
             logger.info(f'Job {job_id} terminated with kube status {kube_status}')
+
+        if kube_status in ('Success', 'Failure'):
+            delete_launched_job(job_id)
 
         return cls(
             id = job_id,
