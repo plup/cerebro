@@ -1,0 +1,153 @@
+---
+fullnameOverride: cerebro-test
+
+image:
+  repository: cerebro/server
+  tag: test
+  pullPolicy: Always
+
+workerImage: cerebro/worker:test
+
+watcher:
+  enabled: false
+
+serverEnv:
+  - name: CEREBRO_API_KEY
+    value: cortex-api-key-change-me
+  - name: TH_URL
+    value: http://thehive:9000
+  - name: TH_USER
+    value: user@thehive.local
+  - name: TH_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: thehive-default-pw
+        key: default-password
+
+workers:
+  - name: foo
+    type: responder
+    description: Test responder designed to run on observables
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-test-job-
+        labels:
+          cerebro-test/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+            containers:
+              - name: job
+                imagePullPolicy: Always
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+  - name: bar
+    type: analyzer
+    description: Test analyzer designed to support all operations
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-test-job-
+        labels:
+          cerebro-test/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+            containers:
+              - name: job
+                imagePullPolicy: Always
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+  - name: fail
+    type: responder
+    description: Test responder designed to fail in kube
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-test-job-
+        labels:
+          cerebro-test/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+            containers:
+              - name: job
+                command: ["false"]
+                imagePullPolicy: Always
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+
+logConfig: |
+  version: 1
+  disable_existing_loggers: false
+  formatters:
+    simple:
+      format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  handlers:
+    console:
+      class : logging.StreamHandler
+      formatter: simple
+      level   : DEBUG
+      stream  : ext://sys.stdout
+  root:
+    level: WARNING
+    handlers: [console]
+  loggers:
+    uvicorn.error:
+      level: INFO
+      handlers: [console]
+      propagate: no
+    cerebro:
+      level: DEBUG
+      handlers: [console]
+      propagate: no
+    audit:
+      level: INFO
+      handlers: [console]
+      propagate: no

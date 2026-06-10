@@ -2,5 +2,3 @@ build/
 dist/
 .env
 skaffold.yaml
-skaffold.yaml.sample
-k8s/values-test.yaml

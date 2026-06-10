@@ -1,0 +1,33 @@
+---
+# https://skaffold.dev/docs/references/yaml/
+apiVersion: skaffold/v4beta13
+kind: Config
+metadata:
+  name: cerebro
+build:
+  local:
+    push: true
+  tagPolicy:
+    envTemplate:
+      template: test
+  artifacts:
+    - image: cerebro/server
+      platforms:
+        - linux/amd64
+      context: .
+      docker:
+        dockerfile: k8s/Dockerfile
+    - image: cerebro/worker
+      platforms:
+        - linux/amd64
+      context: ./neuron
+      docker:
+        dockerfile: Dockerfile
+manifests:
+  helm:
+    releases:
+      - name: cerebro-test
+        remoteChart: oci://registry/helm-charts/cerebro
+        version: 0.1.2
+        valuesFiles:
+          - k8s/values-test.yaml
