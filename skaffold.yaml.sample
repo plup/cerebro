@@ -31,3 +31,8 @@ manifests:
         version: 0.1.2
         valuesFiles:
           - k8s/values-test.yaml
+        setValueTemplates:
+          image.registry: "{{.IMAGE_DOMAIN_cerebro_server}}"
+          image.repository: "{{.IMAGE_REPO_NO_DOMAIN_cerebro_server}}"
+          image.tag: "{{.IMAGE_TAG_cerebro_server}}@{{.IMAGE_DIGEST_cerebro_server}}"
+          workerImage: "{{.IMAGE_FULLY_QUALIFIED_cerebro_worker}}"
