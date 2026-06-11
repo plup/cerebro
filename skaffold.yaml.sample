@@ -27,8 +27,9 @@ manifests:
   helm:
     releases:
       - name: cerebro-test
-        remoteChart: oci://registry/helm-charts/cerebro
-        version: 0.1.2
+        # remoteChart: oci://registry/helm-charts/cerebro
+        chartPath: ../../platforms/cerebro-deploy/helm
+        # version: 0.1.2
         valuesFiles:
           - k8s/values-test.yaml
         setValueTemplates:

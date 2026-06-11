@@ -21,6 +21,15 @@ def test_polling():
     r = client.get('/api/alert')
     assert r.status_code == 200
 
+
+def test_metrics_endpoint_is_public_prometheus_text():
+    r = TestClient(app).get('/metrics')
+    assert r.status_code == 200
+    assert r.headers['content-type'].startswith('text/plain; version=0.0.4')
+    assert '# TYPE cerebro_job_runs_total counter' in r.text
+    assert '# TYPE cerebro_jobs gauge' in r.text
+
+
 def test_list_analyzer(default_workers):
     r = client.get('/api/analyzer')
     assert r.status_code == 200
@@ -172,6 +181,13 @@ def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
     assert env['CEREBRO_OBJECT_VALUE'] == 'VJ2C9N'
     assert env['CEREBRO_CONTEXT_TYPE'] == ''
     assert env['CEREBRO_CONTEXT_ID'] == ''
+    metrics = client.get('/metrics').text
+    assert (
+        'cerebro_job_runs_total{worker="bar",invocation_type="analyzer"} 1'
+    ) in metrics
+    assert (
+        'cerebro_jobs{worker="bar",invocation_type="analyzer",status="in_progress"} 1'
+    ) in metrics
 
 
 def test_run_responder_with_case(default_workers, k8s_create_job):

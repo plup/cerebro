@@ -5,9 +5,11 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 
 from fastapi import FastAPI
+from fastapi.responses import PlainTextResponse
 from starlette.requests import Request
 
 from cerebro.auth import auth_disabled
+from cerebro.metrics import prometheus_text
 from cerebro.routers import internal, thehive
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,14 @@ app = FastAPI(title='cerebro', lifespan=lifespan)
 
 app.include_router(thehive.router)
 app.include_router(internal.router)
+
+
+@app.get('/metrics', include_in_schema=False)
+def metrics() -> PlainTextResponse:
+    return PlainTextResponse(
+        prometheus_text(),
+        media_type='text/plain; version=0.0.4; charset=utf-8',
+    )
 
 
 @app.middleware("http")

@@ -78,6 +78,15 @@ THEHIVE_API_KEY=your-key-here
 | `TH_USER` + `TH_PASSWORD` | Basic auth if no API key |
 | `TH_VERIFY` | Read by neuron and live tests: `0` disables TLS verification; default `1`. The client accepts ``verify: bool = True``. |
 
+## Metrics
+
+Cerebro exposes Prometheus text metrics on `/metrics`.
+
+| Metric | Type | Labels | Meaning |
+|--------|------|--------|---------|
+| `cerebro_job_runs_total` | counter | `worker`, `invocation_type` | Jobs observed by Cerebro since process start. |
+| `cerebro_jobs` | gauge | `worker`, `invocation_type`, `status` | Jobs grouped by their latest observed worker status (`in_progress`, `success`, `failure`). |
+
 ## Create alerts
 
 With a user created in a non admin organisation (set as default):

@@ -25,6 +25,7 @@ from cerebro.callback import (
     store_launched_job,
     store_synthetic_failed_job,
 )
+from cerebro.metrics import record_job_status
 
 logger = logging.getLogger(__name__)
 
@@ -348,7 +349,7 @@ class K8sJob(BaseModel):
             started=started,
         )
 
-        return cls(
+        job = cls(
             id = k8s_job.metadata.name,
             worker = worker,
             object_type = artefact.type,
@@ -356,6 +357,8 @@ class K8sJob(BaseModel):
             started = started,
             callback_report = None,
         )
+        record_job_status(job)
+        return job
 
     @classmethod
     def synthetic_failure_job(cls, worker: 'Worker', artefact: Any, detail: str) -> 'K8sJob':
@@ -375,7 +378,7 @@ class K8sJob(BaseModel):
             ended=now,
             callback_report=report,
         )
-        return cls(
+        job = cls(
             id=job_id,
             worker=worker,
             object_type=artefact.type,
@@ -384,6 +387,8 @@ class K8sJob(BaseModel):
             ended=now,
             callback_report=report,
         )
+        record_job_status(job)
+        return job
 
     @classmethod
     def fetch(cls, job_id):
@@ -392,7 +397,7 @@ class K8sJob(BaseModel):
             started = datetime.fromisoformat(synthetic['started'])
             ended_raw = synthetic.get('ended') or ''
             ended = datetime.fromisoformat(ended_raw) if ended_raw else None
-            return cls(
+            job = cls(
                 id=job_id,
                 worker=worker,
                 object_type=synthetic['object_type'],
@@ -401,6 +406,8 @@ class K8sJob(BaseModel):
                 ended=ended,
                 callback_report=synthetic['callback_report'],
             )
+            record_job_status(job)
+            return job
 
         # read the job from kube
         try:
@@ -454,7 +461,7 @@ class K8sJob(BaseModel):
         if kube_status in ('Success', 'Failure'):
             delete_launched_job(job_id)
 
-        return cls(
+        job = cls(
             id = job_id,
             worker = worker,
             object_type = object_type,
@@ -463,6 +470,8 @@ class K8sJob(BaseModel):
             ended = k8s_job.status.completion_time,
             callback_report = get_job_report(job_id),
         )
+        record_job_status(job)
+        return job
 
 class ThehiveArtefact(BaseModel):
     """

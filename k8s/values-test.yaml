@@ -145,6 +145,10 @@ logConfig: |
       level: INFO
       handlers: [console]
       propagate: no
+    uvicorn.access:
+      level: INFO
+      handlers: [console]
+      propagate: no
     cerebro:
       level: DEBUG
       handlers: [console]
