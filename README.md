@@ -1,27 +1,20 @@
 # Cerebro
 
-Blueteam automation orchestrator: Cortex-compatible API for TheHive and Kubernetes job execution.
+Automation orchestrator with a Cortex-compatible API for TheHive and Kubernetes job execution.
 
 ## Repository layout
 
 - **Root `pyproject.toml`** — installable package **`cerebro`** from **`src/cerebro/`** (API server, models, routers). It does **not** include the job container code.
 - **`neuron/`** — **nested subproject** in the same shape as Cerebro: its own **`pyproject.toml`**, **`src/`** tree, **`uv.lock`**, and **Hatchling** wheel (`cerebro-neuron`). It exists to build the **Kubernetes neuron/job image** (`neuron/Dockerfile`). Treat it like a sibling mini-repo: run **`uv sync`**, **`uv build`**, or **`uv run`** from **`neuron/`** when working on that image or on `neuron.test`.
 
-## Development lanes
+## Development
 
-There are three Cerebro development lanes:
-
-- **Permanent dev platform:** `~/platforms/cerebro-deploy` is the ArgoCD source of truth for the long-lived `blueteam-dev` Cerebro release.
-- **S1 worker development:** `~/kube/docker-images/cerebro-s1-runscript` uses `skaffold run` to attach its worker ServiceAccount and ConfigMap to that permanent dev platform.
-- **Cerebro source development:** this repo uses `skaffold run` to deploy a disposable `cerebro-test` Helm release for local application-code testing.
-
-## Run the source test platform
-
-Use Skaffold when changing the Cerebro API or the bundled neuron worker code. This deploys a separate `cerebro-test` release and does not own the permanent dev platform.
+Use Skaffold when changing the Cerebro API or the bundled neuron worker code:
 
 ```bash
 cp skaffold.yaml.sample skaffold.yaml
 skaffold run
+skaffold delete
 ```
 
 Keep `skaffold.yaml` local. The tracked sample and `k8s/values-test.yaml` use placeholder image and chart references that can be adapted to your registry.
@@ -29,6 +22,13 @@ Keep `skaffold.yaml` local. The tracked sample and `k8s/values-test.yaml` use pl
 The Skaffold test values set `CEREBRO_DISABLE_AUTH=1` on the Cerebro server so local-only
 API testing does not need TheHive/Cortex credentials. This disables Bearer authentication for
 both TheHive-compatible routes and worker callbacks.
+
+Run unit tests:
+
+```bash
+uv run --extra dev pytest tests/unit
+(cd neuron && uv run python -m unittest discover -s tests)
+```
 
 ## Build images manually
 
