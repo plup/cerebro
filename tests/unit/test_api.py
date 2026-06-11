@@ -1,4 +1,6 @@
 """Module testing the fastapi response validation."""
+import logging
+
 from fastapi.testclient import TestClient
 from kubernetes.client.exceptions import ApiException
 from kubernetes.utils.create_from_yaml import FailToCreateError
@@ -58,6 +60,25 @@ def test_thehive_rejects_wrong_bearer(monkeypatch):
     assert bad.get('/api/status').status_code == 403
 
 
+def test_startup_warns_when_auth_is_disabled_for_local_tests(monkeypatch, caplog):
+    monkeypatch.setenv('CEREBRO_DISABLE_AUTH', '1')
+    with caplog.at_level(logging.WARNING, logger='cerebro.api'):
+        with TestClient(app):
+            pass
+    assert [
+        record.message
+        for record in caplog.records
+        if record.name == 'cerebro.api'
+    ] == ['Cerebro HTTP authentication is disabled by CEREBRO_DISABLE_AUTH=1']
+
+
+def test_thehive_routes_can_disable_auth_for_local_tests(monkeypatch):
+    monkeypatch.delenv('CEREBRO_API_KEY', raising=False)
+    monkeypatch.setenv('CEREBRO_DISABLE_AUTH', '1')
+    unauth = TestClient(app)
+    assert unauth.get('/api/status').status_code == 200
+
+
 def test_job_callback_stores_report(monkeypatch):
     monkeypatch.setenv('CEREBRO_API_KEY', 'test-secret')
     r = client.post(
@@ -79,6 +100,17 @@ def test_job_callback_rejects_bad_token(monkeypatch):
         headers={'Authorization': 'Bearer wrong'},
     )
     assert r.status_code == 403
+
+
+def test_job_callback_can_disable_auth_for_local_tests(monkeypatch):
+    monkeypatch.delenv('CEREBRO_API_KEY', raising=False)
+    monkeypatch.setenv('CEREBRO_DISABLE_AUTH', '1')
+    unauth = TestClient(app)
+    r = unauth.post('/api/job/local-job-id/callback', json={'success': True})
+    assert r.status_code == 200
+    from cerebro.callback import get_job_report
+
+    assert get_job_report('local-job-id') == {'success': True}
 
 
 def test_run_analyzer_kubernetes_admission_denied(default_workers, mocker):

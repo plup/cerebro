@@ -14,6 +14,8 @@ watcher:
 serverEnv:
   - name: CEREBRO_API_KEY
     value: cortex-api-key-change-me
+  - name: CEREBRO_DISABLE_AUTH
+    value: "1"
   - name: TH_URL
     value: http://thehive:9000
   - name: TH_USER

@@ -26,6 +26,10 @@ skaffold run
 
 Keep `skaffold.yaml` local. The tracked sample and `k8s/values-test.yaml` use placeholder image and chart references that can be adapted to your registry.
 
+The Skaffold test values set `CEREBRO_DISABLE_AUTH=1` on the Cerebro server so local-only
+API testing does not need TheHive/Cortex credentials. This disables Bearer authentication for
+both TheHive-compatible routes and worker callbacks.
+
 ## Build images manually
 
 Build the images:

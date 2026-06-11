@@ -4,7 +4,7 @@ from os import environ
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-from cerebro.auth import BEARER_PREFIX
+from cerebro.auth import BEARER_PREFIX, auth_disabled
 from cerebro.callback import store_job_report
 
 router = APIRouter(tags=['internal'])
@@ -12,6 +12,9 @@ router = APIRouter(tags=['internal'])
 
 def verify_job_callback_token(authorization: str | None = Header(None)) -> None:
     """Require ``Authorization: Bearer`` matching :envvar:`CEREBRO_API_KEY` (same key as TheHive)."""
+    if auth_disabled():
+        return
+
     try:
         expected = environ['CEREBRO_API_KEY']
     except KeyError:

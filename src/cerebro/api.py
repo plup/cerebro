@@ -7,6 +7,7 @@ from importlib.metadata import version
 from fastapi import FastAPI
 from starlette.requests import Request
 
+from cerebro.auth import auth_disabled
 from cerebro.routers import internal, thehive
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,8 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info('cerebro version %s', version('cerebro'))
+    if auth_disabled():
+        logger.warning('Cerebro HTTP authentication is disabled by CEREBRO_DISABLE_AUTH=1')
     yield
 
 

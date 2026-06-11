@@ -9,12 +9,20 @@ from fastapi import Header, HTTPException
 BEARER_PREFIX = 'Bearer '
 
 
+def auth_disabled() -> bool:
+    """Return whether HTTP authentication is explicitly disabled for local testing."""
+    return environ.get('CEREBRO_DISABLE_AUTH') == '1'
+
+
 def verify_api_key(authorization: str | None = Header(None)) -> None:
     """
     Require ``Authorization: Bearer`` matching :envvar:`CEREBRO_API_KEY` (Cortex-compatible API key).
 
     Used for routes TheHive calls as a Cortex client. When the variable is unset, returns 503.
     """
+    if auth_disabled():
+        return
+
     try:
         expected = environ['CEREBRO_API_KEY']
     except KeyError:
