@@ -76,7 +76,7 @@ def get_launched_job(job_id: str) -> dict[str, Any] | None:
         return _launched_jobs.get(job_id)
 
 
-def delete_launched_job(job_id: str) -> None:
-    """Drop launch metadata once the Job reached a terminal state in Kubernetes."""
+def delete_launched_job(job_id: str) -> bool:
+    """Drop launch metadata and return whether it existed."""
     with _lock:
-        _launched_jobs.pop(job_id, None)
+        return _launched_jobs.pop(job_id, None) is not None

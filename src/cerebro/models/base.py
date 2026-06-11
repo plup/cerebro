@@ -456,10 +456,9 @@ class K8sJob(BaseModel):
                 kube_status = 'Failure'
             else:
                 kube_status = 'Success'
-            logger.info(f'Job {job_id} terminated with kube status {kube_status}')
 
-        if kube_status in ('Success', 'Failure'):
-            delete_launched_job(job_id)
+        if kube_status in ('Success', 'Failure') and delete_launched_job(job_id):
+            logger.info(f'Job {job_id} terminated with kube status {kube_status}')
 
         job = cls(
             id = job_id,
