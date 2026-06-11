@@ -22,35 +22,123 @@ jobs:
             context: .
             file: k8s/Dockerfile
             image_suffix: "-server"
+            version_file: pyproject.toml
           - name: worker
             context: neuron
             file: neuron/Dockerfile
             image_suffix: "-worker"
+            version_file: neuron/pyproject.toml
     steps:
       - uses: actions/checkout@v4
 
-      - name: Project version (root pyproject.toml)
-        id: meta
+      - name: Detect image source changes
+        id: changes
+        shell: bash
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          IMAGE_NAME: ${{ matrix.name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          set -euo pipefail
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" || "${REF_TYPE}" == "tag" ]]; then
+            echo "build=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          base="${BEFORE}"
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            base="${PR_BASE_SHA}"
+          fi
+
+          if [[ -z "${base}" || "${base}" =~ ^0+$ ]]; then
+            echo "build=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if ! git fetch --no-tags --depth=1 origin "${base}"; then
+            echo "build=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${base}" "${GITHUB_SHA}")"
+          printf 'Changed files:\n%s\n' "${changed_files}"
+
+          case "${IMAGE_NAME}" in
+            server)
+              related_paths='^(README\.md|k8s/Dockerfile|pyproject\.toml|uv\.lock|src/)'
+              ;;
+            worker)
+              related_paths='^(neuron/Dockerfile|neuron/pyproject\.toml|neuron/uv\.lock|neuron/src/)'
+              ;;
+            *)
+              echo "Unknown image ${IMAGE_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          if printf '%s\n' "${changed_files}" | grep -Eq "${related_paths}"; then
+            echo "build=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "build=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Project version
+        if: steps.changes.outputs.build == 'true'
+        id: meta
+        env:
+          VERSION_FILE: ${{ matrix.version_file }}
+        run: |
+          VERSION=$(python3 -c "import os, tomllib; print(tomllib.load(open(os.environ['VERSION_FILE'], 'rb'))['project']['version'])")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Image name (ghcr.io)
+        if: steps.changes.outputs.build == 'true'
         run: |
           echo "IMAGE_NAME_LC=ghcr.io/${GITHUB_REPOSITORY,,}${{ matrix.image_suffix }}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
+        if: steps.changes.outputs.build == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
+        if: steps.changes.outputs.build == 'true' && github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check version tag is new
+        if: steps.changes.outputs.build == 'true' && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          image_tag="${IMAGE_NAME_LC}:${{ steps.meta.outputs.version }}"
+          set +e
+          inspect_output="$(docker buildx imagetools inspect "${image_tag}" 2>&1)"
+          inspect_status=$?
+          set -e
+
+          if [[ "${inspect_status}" -eq 0 ]]; then
+            echo "Version tag ${image_tag} already exists; refusing to overwrite it." >&2
+            exit 1
+          fi
+
+          if printf '%s\n' "${inspect_output}" | grep -Eiq '(not found|manifest unknown|name unknown|no such manifest)'; then
+            echo "Version tag ${image_tag} does not exist yet."
+            exit 0
+          fi
+
+          printf '%s\n' "${inspect_output}" >&2
+          echo "Could not verify whether ${image_tag} already exists; refusing to upload." >&2
+          exit 1
+
       - name: Build and push (${{ matrix.name }})
+        if: steps.changes.outputs.build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -60,3 +148,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME_LC }}:${{ steps.meta.outputs.version }}
             ${{ env.IMAGE_NAME_LC }}:sha-${{ github.sha }}
+
+      - name: Skip unchanged image
+        if: steps.changes.outputs.build != 'true'
+        run: echo "No related source changes for ${{ matrix.name }} image."
