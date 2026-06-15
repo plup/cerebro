@@ -138,6 +138,7 @@ def inject_cerebro_invocation_env(manifest: dict, artefact: Any, worker_name: st
         'CEREBRO_OBJECT_ID': artefact.id,
         'CEREBRO_CONTEXT_TYPE': artefact.ctx_type or '',
         'CEREBRO_CONTEXT_ID': artefact.ctx_id or '',
+        'CEREBRO_ORGANISATION': artefact.organisation or '',
         'CEREBRO_WORKER_NAME': worker_name,
     }
     container = manifest['spec']['template']['spec']['containers'][0]
@@ -491,12 +492,15 @@ class ThehiveArtefact(BaseModel):
     data: str = ''
     ctx_type: str = ''
     ctx_id: str = ''
+    organisation: str = ''
 
     @classmethod
     def from_responder_event(cls, event: Any) -> 'ThehiveArtefact':
         """Build from ``POST /api/responder/.../run`` bodies (nested TheHive object references)."""
         try:
-            artefact: dict[str, str] = {}
+            artefact: dict[str, str] = {
+                'organisation': event['parameters'].get('organisation') or ''
+            }
             dt = event['dataType']
             # Nested payloads (TheHive object references)
             if dt == 'thehive:case_artifact':
@@ -537,7 +541,9 @@ class ThehiveArtefact(BaseModel):
                     f'Analyzer runs expect a flat observable (dataType + data); got {dt!r}'
                 )
 
-            artefact: dict[str, str] = {}
+            artefact: dict[str, str] = {
+                'organisation': event['parameters'].get('organisation') or ''
+            }
             artefact['type'] = f'observable:{dt}'
             data_val = event.get('data')
             if isinstance(data_val, str) and data_val != '':

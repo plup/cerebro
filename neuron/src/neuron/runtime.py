@@ -25,6 +25,7 @@ class InvocationParams:
     object_id: str | None
     context_type: str | None
     context_id: str | None
+    organisation: str | None
 
     @classmethod
     def from_environ(cls) -> InvocationParams:
@@ -47,6 +48,7 @@ class InvocationParams:
         raw_ctx_i = environ.get('CEREBRO_CONTEXT_ID', '')
         context_type = raw_ctx_t if raw_ctx_t in ('alert', 'case') else None
         context_id = raw_ctx_i or None
+        organisation = environ.get('CEREBRO_ORGANISATION') or None
 
         if role == 'analyzer':
             if object_type is None or object_value is None:
@@ -67,6 +69,7 @@ class InvocationParams:
             object_id=object_id,
             context_type=context_type,
             context_id=context_id,
+            organisation=organisation,
         )
 
 
@@ -83,7 +86,10 @@ class CerebroNeuron:
     def build_thehive_client(self) -> ThehiveClient | None:
         """Return a :class:`ThehiveClient` when ``TH_URL`` is set; otherwise ``None``."""
         try:
-            client = ThehiveClient(verify=bool(int(environ.get('TH_VERIFY', '1'))))
+            client = ThehiveClient(
+                organisation=self.invocation.organisation,
+                verify=bool(int(environ.get('TH_VERIFY', '1'))),
+            )
             logger.info(f'TheHive client initialized for {client.base_url!r}')
             return client
         except KeyError:

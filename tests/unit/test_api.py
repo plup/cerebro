@@ -181,6 +181,7 @@ def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
     assert env['CEREBRO_OBJECT_VALUE'] == 'VJ2C9N'
     assert env['CEREBRO_CONTEXT_TYPE'] == ''
     assert env['CEREBRO_CONTEXT_ID'] == ''
+    assert env['CEREBRO_ORGANISATION'] == 'org'
     metrics = client.get('/metrics').text
     assert (
         'cerebro_job_runs_total{worker="bar",invocation_type="analyzer"} 1'
@@ -259,6 +260,7 @@ def test_run_responder_with_alert(default_workers, k8s_create_job):
     assert env['CEREBRO_OBJECT_ID'] == '~1'
     assert env['CEREBRO_CONTEXT_TYPE'] == 'alert'
     assert env['CEREBRO_CONTEXT_ID'] == '~2'
+    assert env['CEREBRO_ORGANISATION'] == 'org'
 
 
 def test_waitreport_when_fetch_fails_returns_failure_with_report(mocker):

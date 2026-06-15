@@ -26,6 +26,7 @@ class ThehiveClient(Client):
         key: str | None = None,
         user: str | None = None,
         password: str | None = None,
+        organisation: str | None = None,
         *,
         timeout: float = 120.0,
         verify: bool = True,
@@ -38,6 +39,8 @@ class ThehiveClient(Client):
             user = environ.get('TH_USER')
         if password is None:
             password = environ.get('TH_PASSWORD')
+        if organisation is None:
+            organisation = environ.get('CEREBRO_ORGANISATION') or environ.get('TH_ORGANISATION')
 
         headers: dict[str, str] = {}
         auth: BasicAuth | None = None
@@ -45,6 +48,8 @@ class ThehiveClient(Client):
             headers['Authorization'] = f'Bearer {key}'
         else:
             auth = BasicAuth(user or '', password or '')
+        if organisation:
+            headers['X-Organisation'] = organisation
 
         super().__init__(
             base_url=base,
@@ -55,14 +60,47 @@ class ThehiveClient(Client):
             **kwargs,
         )
 
-    def get_observable(self, observable_id: str) -> dict[str, Any]:
+    def get_observable(
+        self,
+        observable_id: str,
+        *,
+        context_type: Literal['case', 'alert'] | None = None,
+        context_id: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Fetch a single observable by id (TheHive 5+ ``GET /api/v1/observable/{id}``).
+        Fetch a single observable by id.
 
-        TheHive 4 / v0 deployments often expose case artifacts as
-        ``GET /api/v0/case/artifact/{id}`` or alert artifacts as
-        ``GET /api/v0/alert/artifact/{id}`` instead; use :meth:`get` with those paths if needed.
+        When alert/case context is supplied, first query that context's observable
+        collection, then fall back to the global TheHive 5+ observable endpoint.
         """
+        if context_type is None and (
+            env_context_type := environ.get('CEREBRO_CONTEXT_TYPE')
+        ) in ('alert', 'case'):
+            context_type = env_context_type
+        if context_id is None:
+            context_id = environ.get('CEREBRO_CONTEXT_ID') or None
+        if context_type is not None and context_type not in ('alert', 'case'):
+            raise ValueError(f'context_type must be "case" or "alert", got {context_type!r}')
+
+        if context_type and context_id:
+            r = self.post(
+                '/api/v1/query',
+                json={
+                    'query': [
+                        {
+                            '_name': f'get{context_type.title()}',
+                            'idOrName': context_id,
+                        },
+                        {'_name': 'observables'},
+                        {'_name': 'filter', '_id': observable_id},
+                        {'_name': 'page', 'from': 0, 'to': 1},
+                    ],
+                },
+            )
+            r.raise_for_status()
+            if observables := r.json():
+                return observables[0]
+
         r = self.get(f'/api/v1/observable/{observable_id}')
         r.raise_for_status()
         return r.json()
