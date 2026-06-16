@@ -112,11 +112,14 @@ class CerebroNeuron:
                 'and CEREBRO_JOB_ID to post results'
             )
             return
+        body = report.to_dict()
+        if body.get('success'):
+            body.setdefault('full', {})['jobId'] = job_id
         url = f"{base.rstrip('/')}/api/job/{job_id}/callback"
         logger.info(f'Posting report to Cerebro callback {url}')
         r = httpx.post(
             url,
-            json=report.to_dict(),
+            json=body,
             headers={'Authorization': f'Bearer {token}'},
             timeout=120.0,
         )
@@ -125,10 +128,14 @@ class CerebroNeuron:
 
     def fail(self, message: str) -> NoReturn:
         """
-        Record a failed run (``success: false`` and ``errorMessage``), POST it to Cerebro when
-        callback env vars are set, then exit the process with code 0 so the Job completes
-        successfully while TheHive still sees a failed Cortex report.
+        Record a failed run, POST it to Cerebro when callback env vars are set, then exit the
+        process with code 0 so the Job completes while TheHive still sees a failed Cortex report.
         """
         logger.error(f'Neuron failed: {message}')
-        self.send_report(Report(error_message=message))
+        error_message = (
+            f'Job {job_id} failed: {message}'
+            if (job_id := environ.get('CEREBRO_JOB_ID'))
+            else message
+        )
+        self.send_report(Report(error_message=error_message))
         raise SystemExit(0)

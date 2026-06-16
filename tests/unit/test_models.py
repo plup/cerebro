@@ -151,6 +151,7 @@ class TestCortexJobReport():
             callback_report={'success': True, 'full': {'message': 'from callback'}},
         )
         assert job.report['full']['message'] == 'from callback'
+        assert job.report['full']['jobId'] == 'j1'
 
     def test_report_injects_success_when_callback_omits_key(self):
         w = Worker(name='bar', type='analyzer', triggers=['observable:hostname'], manifest={})
@@ -162,7 +163,10 @@ class TestCortexJobReport():
             started=datetime.now(),
             callback_report={'full': {'message': 'done'}},
         )
-        assert ok.report == {'success': True, 'full': {'message': 'done'}}
+        assert ok.report == {
+            'success': True,
+            'full': {'message': 'done', 'jobId': 'j-ok'},
+        }
         bad = CortexJob(
             id='j-bad',
             worker=w,
@@ -183,7 +187,10 @@ class TestCortexJobReport():
             started=datetime.now(),
             callback_report=None,
         )
-        assert ok.report == {'success': True, 'full': {'message': NO_CALLBACK_REPORT_MESSAGE}}
+        assert ok.report == {
+            'success': True,
+            'full': {'message': NO_CALLBACK_REPORT_MESSAGE, 'jobId': 'j3'},
+        }
         bad = CortexJob(
             id='j4',
             worker=w,
@@ -194,7 +201,7 @@ class TestCortexJobReport():
         )
         assert bad.report == {
             'success': False,
-            'errorMessage': f'Job failed; check the Kubernetes job j4.',
+            'errorMessage': 'Job j4 failed. Check kubernetes logs.',
         }
 
     def test_report_ignores_callback_while_in_progress(self):
