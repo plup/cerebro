@@ -130,7 +130,11 @@ def inject_cerebro_invocation_env(manifest: dict, artefact: Any, worker_name: st
     """
     Pass analyzer/responder invocation fields to the worker container via environment variables.
 
-    Keeps container ``args`` free for image-specific or manifest-defined flags.
+    Responders receive the TheHive object id plus alert/case context so they can
+    fetch the full object from TheHive instead of carrying large JSON documents in
+    env vars. ``CEREBRO_ORGANISATION`` keeps worker-side TheHive calls scoped to
+    the same organisation as the original request. Container ``args`` remain free
+    for image-specific or manifest-defined flags.
     """
     updates = {
         'CEREBRO_OBJECT_TYPE': artefact.type,

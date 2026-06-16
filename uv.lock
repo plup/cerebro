@@ -35,7 +35,7 @@ wheels = [
 
 [[package]]
 name = "cerebro"
-version = "4.0.0.post6"
+version = "4.0.0.post7"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi-slim" },

@@ -18,6 +18,7 @@ class ThehiveClient(Client):
     behave like httpx. Adds TheHive-specific construction from env, :meth:`get_observable`,
     :meth:`tag_observable`, :meth:`untag_observable`, :meth:`post_comment`,
     :meth:`add_attachments`, and :meth:`add_attachment_stream` for cases and alerts.
+    ``organisation`` is sent as ``X-Organisation`` when supplied.
     """
 
     def __init__(
@@ -70,8 +71,12 @@ class ThehiveClient(Client):
         """
         Fetch a single observable by id.
 
-        When alert/case context is supplied, first query that context's observable
-        collection, then fall back to the global TheHive 5+ observable endpoint.
+        When alert/case context is supplied explicitly or through
+        ``CEREBRO_CONTEXT_TYPE`` / ``CEREBRO_CONTEXT_ID``, first query that
+        context's observable collection, then fall back to the global TheHive 5+
+        observable endpoint. This keeps responder pods small: Cerebro injects
+        the object id and context, and the worker retrieves the full observable
+        document directly from TheHive.
         """
         if context_type is None and (
             env_context_type := environ.get('CEREBRO_CONTEXT_TYPE')

@@ -58,15 +58,16 @@ class CortexJob(K8sJob):
     """
     Flatten related object properties to behave like Cortex.
 
-    A CortexJob has all the properties required by TheHive.
-
-    ``kube_status`` is the Kubernetes Batch Job state (omitted from JSON for TheHive). ``status``
-    follows the callback report's ``success`` when a payload was posted; otherwise it matches
-    ``kube_status``.
+    A CortexJob exposes the fields TheHive expects while keeping internal
+    Kubernetes state out of the JSON body. ``kube_status`` is the Kubernetes
+    Batch Job state; ``status`` follows the callback report's ``success`` when a
+    worker posted one, otherwise it matches ``kube_status``. ``report`` uses the
+    callback payload after the job finishes and falls back to Kubernetes-derived
+    success/failure details when no callback exists.
     """
     worker: Worker = Field(exclude=True)
     kube_status: str = Field(exclude=True)
-    organization: str = '' # Cortex normally returns organization but it's apparently not checked by TheHive
+    organization: str = ''
 
     @classmethod
     def from_fetch_failure(cls, job_id: str, message: str) -> 'CortexJob':

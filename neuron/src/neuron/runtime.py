@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class InvocationParams:
-    """Invocation target for a neuron run (from Cerebro-injected ``CEREBRO_*`` environment variables)."""
+    """Invocation target for a neuron run from Cerebro-injected environment variables.
+
+    ``context_type`` / ``context_id`` identify the alert or case that launched a
+    responder. ``organisation`` is forwarded to TheHive so worker-side API calls
+    run in the same organisation as the original TheHive request.
+    """
 
     role: str
     worker_name: str
@@ -73,6 +78,34 @@ class InvocationParams:
         )
 
 
+@dataclass(frozen=True)
+class CallbackConfig:
+    """Cerebro callback endpoint injected into a Kubernetes worker pod."""
+
+    base_url: str
+    token: str
+    job_id: str
+
+    @classmethod
+    def from_environ(cls) -> CallbackConfig | None:
+        """Return the complete callback config, or ``None`` when callbacks are disabled."""
+        base_url = environ.get('CEREBRO_CALLBACK_URL')
+        token = environ.get('CEREBRO_CALLBACK_TOKEN')
+        job_id = environ.get('CEREBRO_JOB_ID')
+        if not all([base_url, token, job_id]):
+            return None
+        return cls(
+            base_url=base_url.rstrip('/'),
+            token=token,
+            job_id=job_id,
+        )
+
+    @property
+    def report_url(self) -> str:
+        """Return the Cerebro endpoint that accepts this job's Cortex-shaped report."""
+        return f'{self.base_url}/api/job/{self.job_id}/callback'
+
+
 class CerebroNeuron:
     """
     Loads invocation from environment variables, initializes a TheHive client, builds the Cortex
@@ -103,10 +136,8 @@ class CerebroNeuron:
         Requires ``CEREBRO_CALLBACK_URL``, ``CEREBRO_CALLBACK_TOKEN`` (same value as Cerebro's
         ``CEREBRO_API_KEY``), and ``CEREBRO_JOB_ID``.
         """
-        base = environ.get('CEREBRO_CALLBACK_URL')
-        token = environ.get('CEREBRO_CALLBACK_TOKEN')
-        job_id = environ.get('CEREBRO_JOB_ID')
-        if not all([base, token, job_id]):
+        callback = CallbackConfig.from_environ()
+        if callback is None:
             logger.info(
                 'Skipping Cerebro callback: set CEREBRO_CALLBACK_URL, CEREBRO_CALLBACK_TOKEN, '
                 'and CEREBRO_JOB_ID to post results'
@@ -114,13 +145,12 @@ class CerebroNeuron:
             return
         body = report.to_dict()
         if body.get('success'):
-            body.setdefault('full', {})['jobId'] = job_id
-        url = f"{base.rstrip('/')}/api/job/{job_id}/callback"
-        logger.info(f'Posting report to Cerebro callback {url}')
+            body.setdefault('full', {})['jobId'] = callback.job_id
+        logger.info(f'Posting report to Cerebro callback {callback.report_url}')
         r = httpx.post(
-            url,
+            callback.report_url,
             json=body,
-            headers={'Authorization': f'Bearer {token}'},
+            headers={'Authorization': f'Bearer {callback.token}'},
             timeout=120.0,
         )
         r.raise_for_status()
