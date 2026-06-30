@@ -2,10 +2,15 @@ import pytest
 import yaml
 from datetime import datetime, timezone
 
-import cerebro.callback as cerebro_callback
 from kubernetes.client.exceptions import ApiException
 
-from cerebro.models.base import Worker, K8sJob, ThehiveArtefact, WorkerConfigurationError, JobExecutionError
+from cerebro.models.base import (
+    Worker,
+    K8sJob,
+    ThehiveArtefact,
+    WorkerConfigurationError,
+    JobExecutionError,
+)
 from cerebro.models.cortex import Analyzer, Responder, CortexJob, NO_CALLBACK_REPORT_MESSAGE
 
 _MINIMAL_MANIFEST = {
@@ -257,39 +262,32 @@ class TestJob():
 
 
 class TestK8sJobFetchMissingInKube():
-    """When Kubernetes returns 404, preserve analyzer/responder identity for TheHive."""
+    """Fetch uses Kubernetes Job annotations while the Job exists."""
 
-    def test_404_with_launched_metadata_terminal_failure_and_stable_poll(self, mocker):
+    def test_existing_job_uses_annotations_when_worker_config_is_gone(self, mocker):
         mocker.patch('cerebro.models.base.K8sJob.load_kube_config', return_value='default')
+        mocker.patch('cerebro.models.base.read_worker_config', return_value=[])
+
+        k8s_job = mocker.Mock()
+        k8s_job.metadata.annotations = {
+            'cerebro/worker': 'removed-responder',
+            'cerebro/type': 'observable:hostname',
+            'cerebro/invocation-type': 'responder',
+        }
+        k8s_job.metadata.creation_timestamp = datetime.now(timezone.utc)
+        k8s_job.status.active = None
+        k8s_job.status.failed = 1
+        k8s_job.status.completion_time = datetime.now(timezone.utc)
         batch = mocker.MagicMock()
-        batch.read_namespaced_job.side_effect = ApiException(status=404, reason='Not Found')
+        batch.read_namespaced_job.return_value = k8s_job
         mocker.patch('cerebro.models.base.client.BatchV1Api', return_value=batch)
 
-        worker = Worker(
-            name='bar',
-            type='analyzer',
-            triggers=['observable:hostname'],
-            manifest=_MINIMAL_MANIFEST,
-        )
-        cerebro_callback.store_launched_job(
-            'neuron-job-k7nh5',
-            worker=worker.model_dump(),
-            object_type='observable:hostname',
-            started=datetime.now(timezone.utc),
-        )
-
-        job = CortexJob.fetch('neuron-job-k7nh5')
-        assert job.worker.name == 'bar'
-        assert job.analyzerName == 'bar'
-        assert job.kube_status == 'Failure'
+        job = CortexJob.fetch('neuron-job-gone-config')
+        assert job.worker.name == 'removed-responder'
+        assert job.type == 'responder'
         assert job.status == 'Failure'
-        assert job.report['success'] is False
 
-        job_again = CortexJob.fetch('neuron-job-k7nh5')
-        assert job_again.worker.name == 'bar'
-        assert batch.read_namespaced_job.call_count == 1
-
-    def test_404_without_launched_metadata_raises(self, mocker):
+    def test_404_without_kubernetes_job_raises(self, mocker):
         mocker.patch('cerebro.models.base.K8sJob.load_kube_config', return_value='default')
         batch = mocker.MagicMock()
         batch.read_namespaced_job.side_effect = ApiException(status=404, reason='Not Found')
@@ -297,3 +295,15 @@ class TestK8sJobFetchMissingInKube():
 
         with pytest.raises(JobExecutionError, match='kube'):
             CortexJob.fetch('unknown-job-id')
+
+    def test_api_error_stays_transient(self, mocker):
+        mocker.patch('cerebro.models.base.K8sJob.load_kube_config', return_value='default')
+        batch = mocker.MagicMock()
+        batch.read_namespaced_job.side_effect = ApiException(
+            status=500,
+            reason='Internal Server Error',
+        )
+        mocker.patch('cerebro.models.base.client.BatchV1Api', return_value=batch)
+
+        with pytest.raises(JobExecutionError, match='kube'):
+            CortexJob.fetch('neuron-job-mfrr5')

@@ -4,16 +4,11 @@ This is process-local: multiple Cerebro replicas each keep a separate store; use
 add shared storage if you need cross-replica callbacks.
 """
 
-from datetime import datetime
 from threading import Lock
 from typing import Any
 
 _lock = Lock()
 _reports: dict[str, dict[str, Any]] = {}
-# Jobs that never reached Kubernetes (e.g. admission denied); keyed by job id returned to TheHive.
-_synthetic_failed_jobs: dict[str, dict[str, Any]] = {}
-# Jobs Cerebro created in Kubernetes (worker + artefact snapshot) so we can answer TheHive after the Job is deleted (TTL/GC).
-_launched_jobs: dict[str, dict[str, Any]] = {}
 
 
 def store_job_report(job_id: str, report: dict[str, Any]) -> None:
@@ -26,57 +21,3 @@ def get_job_report(job_id: str) -> dict[str, Any] | None:
     """Return the callback report for a job id, if one was stored."""
     with _lock:
         return _reports.get(job_id)
-
-
-def store_synthetic_failed_job(
-    job_id: str,
-    *,
-    worker: dict[str, Any],
-    object_type: str,
-    started: datetime,
-    ended: datetime | None,
-    callback_report: dict[str, Any],
-) -> None:
-    """Remember a failed local job so ``fetch`` / ``waitreport`` can rebuild the Cortex job."""
-    with _lock:
-        _synthetic_failed_jobs[job_id] = {
-            'worker': worker,
-            'object_type': object_type,
-            'started': started.isoformat(),
-            'ended': ended.isoformat() if ended else '',
-            'callback_report': callback_report,
-        }
-
-
-def get_synthetic_failed_job(job_id: str) -> dict[str, Any] | None:
-    """Return stored payload for a synthetic failed job, if any."""
-    with _lock:
-        return _synthetic_failed_jobs.get(job_id)
-
-
-def store_launched_job(
-    job_id: str,
-    *,
-    worker: dict[str, Any],
-    object_type: str,
-    started: datetime,
-) -> None:
-    """Remember a successfully created Kubernetes Job so polling survives Job deletion (404)."""
-    with _lock:
-        _launched_jobs[job_id] = {
-            'worker': worker,
-            'object_type': object_type,
-            'started': started.isoformat(),
-        }
-
-
-def get_launched_job(job_id: str) -> dict[str, Any] | None:
-    """Return launch snapshot for a job id, if Cerebro created that Job in this process."""
-    with _lock:
-        return _launched_jobs.get(job_id)
-
-
-def delete_launched_job(job_id: str) -> bool:
-    """Drop launch metadata and return whether it existed."""
-    with _lock:
-        return _launched_jobs.pop(job_id, None) is not None

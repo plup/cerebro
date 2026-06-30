@@ -124,6 +124,72 @@ workers:
                       - ALL
                   seccompProfile:
                     type: RuntimeDefault
+  - name: reject-503
+    type: responder
+    description: Test responder designed to be rejected by the Kubernetes Job API
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-test-job-
+        labels:
+          cerebro-test/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            # Jobs only support Never or OnFailure; Always makes Kubernetes reject creation.
+            restartPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+            containers:
+              - name: job
+                imagePullPolicy: Always
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
+  - name: wait-10-minutes
+    type: responder
+    description: Test responder designed to stay running until manually deleted
+    triggers:
+      - observable:filename
+      - observable:hostname
+    manifest:
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        generateName: cerebro-test-job-
+        labels:
+          cerebro-test/worker: "true"
+      spec:
+        backoffLimit: 0
+        template:
+          spec:
+            restartPolicy: Never
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+            containers:
+              - name: job
+                command: ["python", "-c", "import time; time.sleep(600)"]
+                imagePullPolicy: Always
+                securityContext:
+                  privileged: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  seccompProfile:
+                    type: RuntimeDefault
 
 logConfig: |
   version: 1
@@ -143,17 +209,7 @@ logConfig: |
   loggers:
     uvicorn.error:
       level: INFO
-      handlers: [console]
-      propagate: no
     uvicorn.access:
       level: INFO
-      handlers: [console]
-      propagate: no
     cerebro:
       level: DEBUG
-      handlers: [console]
-      propagate: no
-    audit:
-      level: INFO
-      handlers: [console]
-      propagate: no

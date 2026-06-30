@@ -10,6 +10,7 @@ from starlette.requests import Request
 
 from cerebro.auth import auth_disabled
 from cerebro.metrics import prometheus_text
+from cerebro.models.base import Worker
 from cerebro.routers import internal, thehive
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info('cerebro version %s', version('cerebro'))
+    logger.info(f"cerebro version {version('cerebro')}")
+    workers = Worker.list_workers()
+    logger.info(
+        f"Loaded {len(workers)} workers: "
+        f"{', '.join(f'{worker.name} ({worker.type})' for worker in workers) or 'none'}"
+    )
     if auth_disabled():
         logger.warning('Cerebro HTTP authentication is disabled by CEREBRO_DISABLE_AUTH=1')
     yield

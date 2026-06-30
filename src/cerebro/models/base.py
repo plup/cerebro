@@ -11,20 +11,12 @@ import json
 from os import environ
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field, ValidationError, computed_field
 from kubernetes import client, config, utils
 from kubernetes.utils.create_from_yaml import FailToCreateError
 
-from cerebro.callback import (
-    delete_launched_job,
-    get_job_report,
-    get_launched_job,
-    get_synthetic_failed_job,
-    store_launched_job,
-    store_synthetic_failed_job,
-)
+from cerebro.callback import get_job_report
 from cerebro.metrics import record_job_status
 
 logger = logging.getLogger(__name__)
@@ -189,16 +181,36 @@ class JobExecutionError(RuntimeError):
     """The job failed to execute."""
 
 
-def kubernetes_api_exception_detail(exc: client.exceptions.ApiException) -> str:
-    """Return a log- or user-facing line from a Kubernetes ``ApiException`` (``Status.message`` when JSON)."""
-    reason = (getattr(exc, 'reason', None) or '').strip() or 'Kubernetes API error'
+def kubernetes_api_exception_body_text(exc: client.exceptions.ApiException) -> str:
+    """Return Kubernetes ``ApiException.body`` as text, or an empty string."""
     body = getattr(exc, 'body', None)
     if not body:
-        return reason
+        return ''
     if isinstance(body, bytes):
-        text = body.decode('utf-8', errors='replace')
-    else:
-        text = str(body)
+        return body.decode('utf-8', errors='replace')
+    return str(body)
+
+
+def kubernetes_api_exception_reason(exc: client.exceptions.ApiException) -> str:
+    """Return Kubernetes ``Status.reason`` when present, falling back to ``ApiException.reason``."""
+    text = kubernetes_api_exception_body_text(exc)
+    if text:
+        try:
+            obj = json.loads(text)
+            reason = obj.get('reason')
+            if isinstance(reason, str) and reason.strip():
+                return reason.strip()
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return (getattr(exc, 'reason', None) or '').strip()
+
+
+def kubernetes_api_exception_detail(exc: client.exceptions.ApiException) -> str:
+    """Return a log- or user-facing line from a Kubernetes ``ApiException`` (``Status.message`` when JSON)."""
+    reason = kubernetes_api_exception_reason(exc) or 'Kubernetes API error'
+    text = kubernetes_api_exception_body_text(exc)
+    if not text:
+        return reason
     try:
         obj = json.loads(text)
         msg = obj.get('message')
@@ -340,20 +352,13 @@ class K8sJob(BaseModel):
         except FailToCreateError as e:
             detail = fail_to_create_error_detail(e)
             logger.error(f'Kubernetes create Job failed: {detail}')
-            return cls.synthetic_failure_job(worker, artefact, detail)
+            raise JobExecutionError(f'Kubernetes create Job failed: {detail}') from e
         except client.exceptions.ApiException as e:
             detail = kubernetes_api_exception_detail(e)
             logger.error(f'Kubernetes create Job failed: {detail}')
-            return cls.synthetic_failure_job(worker, artefact, detail)
+            raise JobExecutionError(f'Kubernetes create Job failed: {detail}') from e
 
         started = k8s_job.metadata.creation_timestamp or datetime.now(timezone.utc)
-        store_launched_job(
-            k8s_job.metadata.name,
-            worker=worker.model_dump(),
-            object_type=artefact.type,
-            started=started,
-        )
-
         job = cls(
             id = k8s_job.metadata.name,
             worker = worker,
@@ -366,91 +371,39 @@ class K8sJob(BaseModel):
         return job
 
     @classmethod
-    def synthetic_failure_job(cls, worker: 'Worker', artefact: Any, detail: str) -> 'K8sJob':
-        """
-        Build a completed Failure job when Kubernetes never created a Job.
-
-        Stores a synthetic record so :meth:`fetch` can rebuild the same object for polling.
-        """
-        job_id = f'cerebro-local-{uuid4()}'
-        now = datetime.now(timezone.utc)
-        report: dict[str, Any] = {'success': False, 'errorMessage': detail}
-        store_synthetic_failed_job(
-            job_id,
-            worker=worker.model_dump(),
-            object_type=artefact.type,
-            started=now,
-            ended=now,
-            callback_report=report,
-        )
-        job = cls(
-            id=job_id,
-            worker=worker,
-            object_type=artefact.type,
-            kube_status='Failure',
-            started=now,
-            ended=now,
-            callback_report=report,
-        )
-        record_job_status(job)
-        return job
-
-    @classmethod
     def fetch(cls, job_id):
-        if (synthetic := get_synthetic_failed_job(job_id)) is not None:
-            worker = Worker.model_validate(synthetic['worker'])
-            started = datetime.fromisoformat(synthetic['started'])
-            ended_raw = synthetic.get('ended') or ''
-            ended = datetime.fromisoformat(ended_raw) if ended_raw else None
-            job = cls(
-                id=job_id,
-                worker=worker,
-                object_type=synthetic['object_type'],
-                kube_status='Failure',
-                started=started,
-                ended=ended,
-                callback_report=synthetic['callback_report'],
-            )
-            record_job_status(job)
-            return job
-
         # read the job from kube
         try:
             namespace = cls.load_kube_config()
             k8s_job = client.BatchV1Api().read_namespaced_job(name=job_id, namespace=namespace)
 
         except client.exceptions.ApiException as e:
-            if getattr(e, 'status', None) == 404 and (launched := get_launched_job(job_id)):
-                logger.warning(
-                    'Kubernetes job %s not found (404); answering TheHive with terminal Failure '
-                    'using stored worker metadata',
-                    job_id,
-                )
-                now = datetime.now(timezone.utc)
-                started = datetime.fromisoformat(launched['started'])
-                detail = kubernetes_api_exception_detail(e)
-                report: dict[str, Any] = {'success': False, 'errorMessage': detail}
-                store_synthetic_failed_job(
-                    job_id,
-                    worker=launched['worker'],
-                    object_type=launched['object_type'],
-                    started=started,
-                    ended=now,
-                    callback_report=report,
-                )
-                delete_launched_job(job_id)
-                return cls.fetch(job_id)
             logger.error(str(e))
             raise JobExecutionError(f"Can't access job {job_id} in kube")
 
         # retrieve worker parameters
         try:
-            worker = Worker.get(k8s_job.metadata.annotations['cerebro/worker'])
-            object_type = k8s_job.metadata.annotations['cerebro/type']
+            annotations = k8s_job.metadata.annotations
+            worker_name = annotations['cerebro/worker']
+            object_type = annotations['cerebro/type']
 
-        except KeyError as e:
+        except (AttributeError, KeyError, TypeError) as e:
             logger.error(str(e))
             raise JobExecutionError("Can't retrieve worker config from the job's annotations")
+
+        try:
+            worker = Worker.get(worker_name)
+        except WorkerNotFoundError:
+            try:
+                worker = Worker(
+                    name=worker_name,
+                    type=annotations['cerebro/invocation-type'],
+                    triggers=[object_type],
+                    manifest={},
+                )
+            except (KeyError, TypeError, ValidationError) as e:
+                logger.error(str(e))
+                raise JobExecutionError("Can't retrieve worker config from the job's annotations")
 
         if k8s_job.status.active:
             # nothing to return if the job is still executing
@@ -462,17 +415,18 @@ class K8sJob(BaseModel):
             else:
                 kube_status = 'Success'
 
-        if kube_status in ('Success', 'Failure') and delete_launched_job(job_id):
-            logger.info(f'Job {job_id} terminated with kube status {kube_status}')
+        started = k8s_job.metadata.creation_timestamp or datetime.now(timezone.utc)
+        ended = k8s_job.status.completion_time
+        callback_report = get_job_report(job_id)
 
         job = cls(
             id = job_id,
             worker = worker,
             object_type = object_type,
             kube_status = kube_status,
-            started = k8s_job.metadata.creation_timestamp,
-            ended = k8s_job.status.completion_time,
-            callback_report = get_job_report(job_id),
+            started = started,
+            ended = ended,
+            callback_report = callback_report,
         )
         record_job_status(job)
         return job

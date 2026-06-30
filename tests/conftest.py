@@ -10,21 +10,17 @@ def cerebro_api_key_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def clear_cerebro_in_memory_job_stores():
-    """Isolate tests that use process-local job/report stores in ``cerebro.callback``."""
+def clear_cerebro_in_memory_reports():
+    """Isolate tests that use process-local callback report stores in ``cerebro.callback``."""
     import cerebro.callback as cb
     from cerebro.metrics import reset_metrics
 
     with cb._lock:
         cb._reports.clear()
-        cb._synthetic_failed_jobs.clear()
-        cb._launched_jobs.clear()
     reset_metrics()
     yield
     with cb._lock:
         cb._reports.clear()
-        cb._synthetic_failed_jobs.clear()
-        cb._launched_jobs.clear()
     reset_metrics()
 
 

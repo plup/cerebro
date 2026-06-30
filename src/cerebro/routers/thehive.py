@@ -5,6 +5,7 @@ import logging
 from importlib.metadata import version
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from cerebro.auth import verify_api_key
@@ -82,6 +83,8 @@ def run_analyzer(id: str, event: dict) -> CortexJob:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except WorkerConfigurationError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+    except JobExecutionError as e:
+        return JSONResponse(status_code=503, content={'message': str(e)})
 
 
 @router.post("/api/responder/_search")
@@ -130,6 +133,8 @@ def run_responder(id: str, event: dict) -> CortexJob:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except WorkerConfigurationError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+    except JobExecutionError as e:
+        return JSONResponse(status_code=503, content={'message': str(e)})
 
 
 @router.post('/api/job/status')
@@ -141,7 +146,7 @@ def get_jobs_status(job_ids: dict) -> dict:
             status[_id] = CortexJob.fetch(_id).status
         except JobExecutionError as e:
             logger.error(str(e))
-            status[_id] = CortexJob.from_fetch_failure(_id, str(e)).status
+            status[_id] = 'Failure'
     logger.debug(f'Status returned: {status}')
     return status
 
@@ -153,6 +158,6 @@ def get_job_report(id: str) -> CortexJob:
         job = CortexJob.fetch(id)
     except JobExecutionError as e:
         logger.error(str(e))
-        job = CortexJob.from_fetch_failure(id, str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
     logger.debug(f'Job returned: {job.model_dump()}')
     return job

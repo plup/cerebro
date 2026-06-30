@@ -81,6 +81,16 @@ def test_startup_warns_when_auth_is_disabled_for_local_tests(monkeypatch, caplog
     ] == ['Cerebro HTTP authentication is disabled by CEREBRO_DISABLE_AUTH=1']
 
 
+def test_startup_logs_loaded_workers(default_workers, caplog):
+    with caplog.at_level(logging.INFO, logger='cerebro.api'):
+        with TestClient(app):
+            pass
+
+    assert 'Loaded 2 workers: foo (responder), bar (analyzer)' in [
+        record.message for record in caplog.records if record.name == 'cerebro.api'
+    ]
+
+
 def test_thehive_routes_can_disable_auth_for_local_tests(monkeypatch):
     monkeypatch.delenv('CEREBRO_API_KEY', raising=False)
     monkeypatch.setenv('CEREBRO_DISABLE_AUTH', '1')
@@ -123,7 +133,7 @@ def test_job_callback_can_disable_auth_for_local_tests(monkeypatch):
 
 
 def test_run_analyzer_kubernetes_admission_denied(default_workers, mocker):
-    """Kyverno / admission failures return a finished job with error in ``report`` (HTTP 200)."""
+    """Kyverno / admission failures return a 503 with Cortex-style ``message``."""
     mocker.patch('cerebro.models.base.K8sJob.load_kube_config', return_value='default')
     api_ex = ApiException(status=400, reason='Bad Request')
     api_ex.body = (
@@ -141,16 +151,10 @@ def test_run_analyzer_kubernetes_admission_denied(default_workers, mocker):
         'parameters': {'organisation': 'org', 'user': 'nobody@nowhere.io'},
     }
     r = client.post('/api/analyzer/bar/run', json=payload)
-    assert r.status_code == 200
-    body = r.json()
-    assert body['status'] == 'Failure'
-    assert body['report']['success'] is False
-    assert 'SHA256' in body['report']['errorMessage']
-    job_id = body['id']
-    assert job_id.startswith('cerebro-local-')
-    wr = client.get(f'/api/job/{job_id}/waitreport')
-    assert wr.status_code == 200
-    assert wr.json()['report']['errorMessage'] == body['report']['errorMessage']
+    assert r.status_code == 503
+    assert r.json() == {
+        'message': 'Kubernetes create Job failed: policy: images must use SHA256'
+    }
 
 
 def test_run_analyzer_flat_cortex_body(default_workers, k8s_create_job):
@@ -263,18 +267,14 @@ def test_run_responder_with_alert(default_workers, k8s_create_job):
     assert env['CEREBRO_ORGANISATION'] == 'org'
 
 
-def test_waitreport_when_fetch_fails_returns_failure_with_report(mocker):
+def test_waitreport_when_fetch_fails_returns_503(mocker):
     mocker.patch(
         'cerebro.models.base.K8sJob.fetch',
         side_effect=JobExecutionError("Can't access job missing in kube"),
     )
     r = client.get('/api/job/missing-id/waitreport')
-    assert r.status_code == 200
-    body = r.json()
-    assert body['id'] == 'missing-id'
-    assert body['status'] == 'Failure'
-    assert body['report']['success'] is False
-    assert 'missing in kube' in body['report']['errorMessage']
+    assert r.status_code == 503
+    assert 'missing in kube' in r.json()['detail']
 
 
 def test_job_status_when_fetch_fails_reports_failure(mocker):
